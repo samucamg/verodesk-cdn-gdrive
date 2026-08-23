@@ -12,6 +12,6 @@ GOOGLE_REDIRECT_URI = ""
 
 [[d1_databases]]
 binding = "DB"
-database_name = "verodesk_cdn_db"
-database_id = "PREENCHIDO_PELO_DEPLOY_BUTTON"
+database_name = "cdn_manager_db"
+database_id = "509360a0-3451-464c-af00-df0e64b720bc"
 preview_database_id = "DB"
