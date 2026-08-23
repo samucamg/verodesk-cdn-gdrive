@@ -100,7 +100,6 @@ export default {
                     return new Response(JSON.stringify({ success: true, uploads: results }), { headers: defaultHeaders });
                 }
 
-                // --- INIT CHUNKED UPLOAD ---
                 if (url.pathname === '/api/upload/init' && request.method === 'POST') {
                     if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: defaultHeaders });
                     
@@ -150,7 +149,6 @@ export default {
                     return new Response(JSON.stringify({ success: true, sessionId, newName, ext, mimeType }), { headers: defaultHeaders });
                 }
 
-                // --- TRANSFER CHUNKS ---
                 if (url.pathname === '/api/upload/chunk' && request.method === 'PUT') {
                     if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: defaultHeaders });
                     
@@ -161,7 +159,6 @@ export default {
                     const newName = request.headers.get('x-new-name');
                     const ext = request.headers.get('x-ext');
                     const mimeType = request.headers.get('x-mime-type');
-                    const contentLength = request.headers.get('content-length') || '';
 
                     if (!sessionId || !contentRange || !project || !newName) {
                         return new Response(JSON.stringify({ success: false, error: 'Headers de chunk ausentes' }), { status: 400, headers: defaultHeaders });
@@ -169,16 +166,17 @@ export default {
 
                     const driveUrl = Buffer.from(sessionId, 'base64').toString('utf-8');
 
-                    // CORRECAO: duplex: 'half' obrigatorio para bypass de ReadableStream
+                    // CORRECAO: Carregando payload explicitamente para ArrayBuffer para barrar o Transfer-Encoding chunked
+                    const chunkBuffer = await request.arrayBuffer();
+
                     const driveRes = await fetch(driveUrl, {
                         method: 'PUT',
                         headers: { 
                             'Content-Range': contentRange,
-                            'Content-Length': contentLength
+                            'Content-Length': chunkBuffer.byteLength.toString()
                         },
-                        body: request.body,
-                        duplex: 'half'
-                    } as RequestInit);
+                        body: chunkBuffer
+                    });
 
                     if (driveRes.status === 308) {
                         return new Response(JSON.stringify({ success: true, status: 'uploading' }), { status: 200, headers: defaultHeaders });
