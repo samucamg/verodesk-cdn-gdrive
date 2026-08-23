@@ -1,14 +1,14 @@
-# VeroDesk Serverless CDN Orchestrator
-
+# VeroDesk Serverless CDN on Google Drive
 
 ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?style=flat-square&logo=cloudflare&logoColor=white)
 ![Cloudflare D1](https://img.shields.io/badge/Cloudflare-D1-F38020?style=flat-square&logo=cloudflare&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white)
-![GitHub](https://img.shields.io/badge/GitHub-API-181717?style=flat-square&logo=github&logoColor=white)
+![Google Drive](https://img.shields.io/badge/Google%20Drive-API%20v3-4285F4?style=flat-square&logo=google-drive&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/samucamg/verodesk-cdn-github)
-> 🚀 Um gerenciador de arquivos serverless, executado na borda e pronto para CDN. O VeroDesk Serverless CDN Orchestrator usa um único Cloudflare Worker para entregar o painel web, expor a API administrativa, registrar metadados no Cloudflare D1 e publicar arquivos em um repositório GitHub configurado pelo proprietário da instância.
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/samucamg/verodesk-cdn-gdrive)
+
+> 🚀 Um gerenciador de arquivos serverless, executado na borda e pronto para CDN. O VeroDesk Serverless CDN Orchestrator usa um único Cloudflare Worker para entregar o painel web, expor a API administrativa, registrar metadados no Cloudflare D1 e armazenar arquivos no Google Drive via OAuth 2.0.
 
 ## Índice
 
@@ -20,7 +20,6 @@
 - [Primeiro acesso](#primeiro-acesso)
 - [Autenticação e segurança](#autenticação-e-segurança)
 - [API](#api)
-- [URLs de entrega](#urls-de-entrega)
 - [Domínio personalizado](#domínio-personalizado)
 - [Desenvolvimento local](#desenvolvimento-local-opcional)
 - [Diagnóstico](#diagnóstico)
@@ -29,9 +28,9 @@
 
 ## Visão geral
 
-O **VeroDesk Serverless CDN Orchestrator** transforma um repositório GitHub em uma origem administrável para imagens, documentos e áudio. O projeto foi criado para quem quer publicar e organizar assets por uma interface web, sem expor o token do GitHub no navegador.
+O **VeroDesk Serverless CDN Orchestrator** transforma o Google Drive em uma origem administrável para imagens, documentos, áudio e vídeo. O projeto foi criado para quem quer publicar e organizar assets por uma interface web, sem expor credenciais do Google no navegador.
 
-O usuário faz upload pelo painel. O Worker valida o arquivo e a autenticação, grava o conteúdo no repositório GitHub usando a API oficial, registra os metadados no D1 e devolve URLs para consumo pelo GitHub, GitHub Raw, jsDelivr e, opcionalmente, um domínio próprio de CDN.
+O usuário faz upload pelo painel. O Worker valida o arquivo e a autenticação, grava o conteúdo no Google Drive por meio da API Google Drive v3 e OAuth 2.0, registra os metadados no D1 e entrega o conteúdo por seu próprio endpoint de borda ou, opcionalmente, por um domínio próprio de CDN.
 
 > 💡 A interface estática e a API são servidas pelo **mesmo Worker**. Não existe Cloudflare Pages, `WORKER_API_URL`, segundo deploy ou etapa de copiar URL entre projetos.
 
@@ -39,24 +38,21 @@ O usuário faz upload pelo painel. O Worker valida o arquivo e a autenticação,
 
 O VeroDesk reúne o gerenciamento de arquivos e a distribuição por CDN em um painel único. A dashboard oferece visão rápida do volume armazenado, total de arquivos, categorias e uma galeria para consultar os assets publicados.
 
-![Dashboard do VeroDesk CDN Manager](https://cdn.jsdelivr.net/gh/samucamg/imagens/Outros/2026/08/cdn_manager_1787439929.jpg)
-
-Ao abrir um arquivo na galeria, o sistema disponibiliza os links de entrega prontos para uso, incluindo GitHub, GitHub Raw, jsDelivr e, quando configurado, domínio personalizado.
-
-![Seleção de links de entrega do CDN](https://cdn.jsdelivr.net/gh/samucamg/imagens/Outros/2026/08/imagens_cdn_1787439907.jpg)
+Ao abrir um arquivo na galeria, o sistema disponibiliza o link de entrega pelo próprio Worker e, quando configurado, pelo domínio personalizado.
 
 ## Principais recursos
 
 - 🚀 **Deploy nativo em um clique:** instala Worker, assets estáticos, D1, variáveis e secrets pelo assistente Deploy to Cloudflare.
 - 🖥️ **Painel integrado:** `index.html`, galeria e autenticação são publicados como static assets pelo próprio Worker.
 - 🗄️ **D1 com migration versionada:** o banco de metadados é criado e inicializado com `migrations/0001_initial.sql`.
-- 📦 **Publicação no GitHub:** upload, listagem, renomeação e exclusão operam no repositório de assets definido pelo proprietário.
-- 🌍 **URLs de entrega:** retorno de URLs GitHub, GitHub Raw, jsDelivr e domínio CDN próprio opcional.
-- 🔐 **Token GitHub protegido:** `GITHUB_TOKEN` existe somente como secret do Worker; o navegador nunca recebe essa credencial.
+- ☁️ **Armazenamento no Google Drive:** upload, listagem, renomeação e exclusão são executados pelo Worker via Google Drive API v3.
+- 🌍 **Entrega por proxy de borda:** os arquivos são entregues pelo fluxo Worker → Google Drive → cliente, com suporte opcional a domínio próprio.
+- 🎬 **Arquivos grandes e vídeo:** suporta uploads de até **1,5 GB**, incluindo arquivos MP4 e MKV permitidos pela aplicação.
+- 🔐 **Credenciais Google protegidas:** `GOOGLE_CLIENT_SECRET` existe somente como secret do Worker; o navegador nunca recebe essa credencial.
 - 🔑 **Acesso administrativo:** `UPLOAD_TOKEN` protege painel e endpoints administrativos.
-- 🛡️ **Validações de segurança:** validação de extensão, tamanho máximo de 10 MB, nomes de arquivos, identificadores de projeto e operações de renomeação/exclusão.
-- 📊 **Metadados e estatísticas:** D1 registra caminho, tamanho, extensão, URLs, SHA e data de upload.
-- 🔄 **Renomeação consistente:** o Worker cria o novo arquivo, verifica a exclusão do anterior e sincroniza o registro D1.
+- 🛡️ **Validações de segurança:** validação de extensão, tamanho máximo de 1,5 GB, nomes de arquivos, identificadores de projeto e operações de renomeação/exclusão.
+- 📊 **Metadados e estatísticas:** D1 registra caminho, tamanho, extensão, identificador do arquivo no Drive e data de upload.
+- 🔄 **Renomeação consistente:** o Worker renomeia o arquivo no Drive e sincroniza o registro D1.
 
 ## Arquitetura
 
@@ -75,13 +71,13 @@ Cloudflare Worker
 Painel web          Cloudflare D1
                          |
                          v
-                   GitHub Contents API
+                  Google Drive API v3
                          |
                          v
-              Repositório de assets GitHub
+                  Google Drive (assets)
                          |
                          v
-      GitHub URL | GitHub Raw | jsDelivr | CDN própria
+             Edge CDN / Domínio próprio
 ```
 
 ## Deploy em um clique
@@ -90,18 +86,33 @@ Painel web          Cloudflare D1
 
 Antes de clicar no botão, tenha:
 
-1. Uma conta no [GitHub](https://github.com/signup).
-2. Uma conta na [Cloudflare](https://dash.cloudflare.com/sign-up).
-3. Um repositório GitHub destinado aos seus assets, público caso queira distribuir diretamente por jsDelivr.
-4. Um Personal Access Token do GitHub autorizado a ler e gravar nesse repositório de assets.
+1. Uma conta na [Cloudflare](https://dash.cloudflare.com/sign-up).
+2. Uma conta Google que tenha acesso ao Google Drive onde os assets serão armazenados.
+3. Um projeto no Google Cloud com a Google Drive API ativada.
+4. Credenciais OAuth 2.0 do tipo **Aplicativo da Web**, com Client ID e Client Secret.
 
 > 📌 Você não precisa usar terminal, instalar Node.js, instalar Wrangler ou executar `git clone` para instalar uma instância pelo fluxo abaixo.
 
+### Preparar o Google Cloud
+
+1. Acesse o [Google Cloud Console](https://console.cloud.google.com/).
+2. Crie um projeto novo ou selecione um projeto existente.
+3. Em **APIs e serviços** → **Biblioteca**, ative a **Google Drive API**.
+4. Em **APIs e serviços** → **Tela de permissão OAuth**, configure a tela de consentimento do aplicativo.
+5. Em **APIs e serviços** → **Credenciais**, crie uma credencial OAuth 2.0 do tipo **Aplicativo da Web**.
+6. Adicione a seguinte URI em **URIs de redirecionamento autorizados**, substituindo pelo endereço real do seu Worker:
+
+```text
+https://seu-worker.workers.dev/api/auth/google/callback
+```
+
+7. Guarde o Client ID e o Client Secret para informá-los no assistente de deploy.
+
 ### Iniciar a instalação
 
-Clique no botão e conecte sua conta GitHub à Cloudflare quando o assistente solicitar:
+Clique no botão para abrir o assistente Deploy to Cloudflare:
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/samucamg/verodesk-cdn-github)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/samucamg/verodesk-cdn-gdrive)
 
 O assistente criará uma cópia do projeto na sua conta GitHub e abrirá o formulário de configuração Cloudflare. Escolha nomes exclusivos para o Worker e para o banco D1, preencha as variáveis e secrets e finalize a implantação.
 
@@ -116,12 +127,14 @@ O assistente criará uma cópia do projeto na sua conta GitHub e abrirá o formu
 
 ### O que você ainda informa
 
-Por segurança, dois recursos pertencem à sua conta e precisam ser fornecidos no formulário:
+Por segurança, as credenciais OAuth pertencem ao seu projeto Google Cloud e precisam ser fornecidas no formulário:
 
-- O repositório GitHub que receberá os arquivos.
-- Um token GitHub limitado a esse repositório.
+- O `GOOGLE_CLIENT_ID` do aplicativo OAuth 2.0.
+- O `GOOGLE_CLIENT_SECRET` correspondente.
+- A URL de callback do Worker, em `GOOGLE_REDIRECT_URI`.
+- Um `UPLOAD_TOKEN` forte para acesso administrativo.
 
-O deploy não cria um Personal Access Token por você e não deve receber uma chave GitHub com acesso amplo a todos os seus repositórios.
+O deploy não cria credenciais OAuth por você. Mantenha o Client Secret somente no campo secreto do Cloudflare e nunca o exponha no frontend, em repositórios ou em logs.
 
 ## Campos do assistente
 
@@ -137,33 +150,23 @@ O deploy não cria um Personal Access Token por você e não deve receber uma ch
 
 | Nome | Tipo | Exemplo | Finalidade |
 |---|---|---|---|
-| `GITHUB_USER` | Variável | `meuusuario` | Usuário ou organização proprietária do repositório de assets |
-| `GITHUB_REPO` | Variável | `minha-cdn-assets` | Repositório que receberá os arquivos enviados pelo painel |
-| `GITHUB_BRANCH` | Variável | `main` | Branch de destino; mantenha `main` salvo se seu repositório usar outra branch |
-| `GITHUB_TOKEN` | Secret | `github_pat_...` | Token GitHub que permite ao Worker ler e alterar o repositório de assets |
+| `GOOGLE_CLIENT_ID` | Variável | `1234567890-abc.apps.googleusercontent.com` | Identificador público do cliente OAuth 2.0 criado no Google Cloud |
+| `GOOGLE_CLIENT_SECRET` | Secret | `GOCSPX-...` | Segredo do cliente OAuth 2.0 usado pelo Worker na troca de código e renovação de tokens |
+| `GOOGLE_REDIRECT_URI` | Variável | `https://seu-worker.workers.dev/api/auth/google/callback` | URI de callback cadastrada nas credenciais OAuth do Google Cloud |
 | `UPLOAD_TOKEN` | Secret | Token aleatório longo | Senha de acesso ao painel e às rotas administrativas |
-| `CDN_BASE_URL` | Variável opcional | `https://cdn.seudominio.com` | Base de uma CDN ou domínio próprio; informe sem barra final |
+| `CDN_BASE_URL` | Variável opcional | `https://cdn.seudominio.com` | Base do domínio próprio para entrega dos arquivos; informe sem barra final |
 
-### Criar o token GitHub
-
-Prefira um **fine-grained Personal Access Token**:
-
-1. No GitHub, abra **Settings** → **Developer settings** → **Personal access tokens** → **Fine-grained tokens**.
-2. Clique em **Generate new token**.
-3. Em acesso a repositórios, selecione apenas seu repositório de assets.
-4. Em permissões do repositório, conceda **Contents: Read and write**.
-5. Defina uma expiração adequada e gere o token.
-6. Cole o token somente no campo secreto `GITHUB_TOKEN` do Cloudflare.
+> 📌 Embora `GOOGLE_CLIENT_ID` seja normalmente uma variável pública, ele também pode ser armazenado como secret se a configuração do seu deploy exigir isso. `GOOGLE_CLIENT_SECRET` deve sempre ser um secret.
 
 ### Criar o UPLOAD_TOKEN
 
 Use um token aleatório com pelo menos 24 caracteres, contendo letras maiúsculas, minúsculas, números e símbolos. Não use nome, domínio, data ou texto previsível.
 
-Exemplo de formato válido — **não reutilize este valor**:
-
 ```text
 R7!mK2qVx9#Ld4Wa8Tp6Ns3Z
 ```
+
+> Não reutilize o valor de exemplo.
 
 ## Primeiro acesso
 
@@ -175,11 +178,13 @@ https://meu-cdn-manager.SEUSUBDOMINIO.workers.dev
 
 1. Abra essa URL no navegador.
 2. Informe o seu `UPLOAD_TOKEN` no painel.
-3. Selecione um projeto e envie um arquivo de teste não confidencial.
-4. Confirme que o arquivo foi criado no repositório GitHub configurado.
-5. Abra a URL jsDelivr ou GitHub Raw devolvida pelo sistema.
+3. Clique em **Conectar Drive**.
+4. Entre com a conta Google que contém o Drive de destino e autorize o aplicativo solicitado.
+5. Após o retorno ao Worker, o sistema registra o `refresh_token` no banco D1 para que os uploads posteriores sejam feitos sem repetir a autorização.
+6. Selecione um projeto e envie um arquivo de teste não confidencial.
+7. Confirme que o arquivo aparece no Google Drive configurado e que a URL de entrega retornada pelo Worker abre corretamente.
 
-> ✅ Se o upload aparecer no repositório e a URL do arquivo abrir corretamente, Worker, D1, painel e API GitHub estão configurados.
+> ✅ Se o arquivo aparecer no Drive e a URL de entrega abrir corretamente, Worker, D1, painel, autenticação OAuth e Google Drive API estão configurados.
 
 ## Autenticação e segurança
 
@@ -187,9 +192,10 @@ https://meu-cdn-manager.SEUSUBDOMINIO.workers.dev
 
 | Credencial | Onde fica | Nunca coloque em |
 |---|---|---|
-| `GITHUB_TOKEN` | Secret do Cloudflare e gerenciador de senhas | HTML, JavaScript do frontend, Git, README, logs e capturas de tela |
+| `GOOGLE_CLIENT_SECRET` | Secret do Cloudflare e gerenciador de senhas | HTML, JavaScript do frontend, Git, README, logs e capturas de tela |
+| `refresh_token` | Banco D1, acessível somente ao Worker | HTML, JavaScript do frontend, Git, README, logs e capturas de tela |
 | `UPLOAD_TOKEN` | Secret do Cloudflare e gerenciador de senhas | Repositório público, URLs, README e scripts de frontend |
-| `GITHUB_USER` e `GITHUB_REPO` | Variáveis do Worker | Não são secrets, mas devem apontar para o repositório correto |
+| `GOOGLE_CLIENT_ID` e `GOOGLE_REDIRECT_URI` | Variáveis do Worker | Não são secrets, mas devem corresponder às credenciais OAuth configuradas no Google Cloud |
 
 O painel pode enviar `UPLOAD_TOKEN` pelo formulário de upload e as demais rotas administrativas aceitam o header:
 
@@ -197,24 +203,21 @@ O painel pode enviar `UPLOAD_TOKEN` pelo formulário de upload e as demais rotas
 Authorization: Bearer SEU_UPLOAD_TOKEN
 ```
 
-O token GitHub nunca é retornado pela API e só é usado pelo Worker na comunicação servidor-a-servidor com a GitHub Contents API.
+O Client Secret e o `refresh_token` nunca são retornados pela API. Eles são usados exclusivamente pelo Worker na comunicação servidor a servidor com a Google Drive API.
 
 ### Validações aplicadas
 
-- Limite de upload: **10 MB**.
-- Extensões permitidas: `jpg`, `jpeg`, `png`, `gif`, `webp`, `svg`, `pdf` e `mp3`.
+- Limite de upload: **1,5 GB** (`1500 * 1024 * 1024` bytes).
+- Extensões permitidas: `jpg`, `jpeg`, `png`, `gif`, `webp`, `svg`, `pdf`, `mp3`, `mp4` e `mkv`.
 - `project` aceita somente letras, números, `_` e `-`, com até 64 caracteres.
-- Nomes de arquivo são normalizados antes de compor o caminho GitHub.
+- Nomes de arquivo são normalizados antes de serem enviados ao Google Drive.
 - Renomeações rejeitam nomes vazios ou compostos apenas por caracteres inválidos.
-- A exclusão anterior em uma renomeação é verificada antes de sincronizar o D1.
+- A operação de renomeação sincroniza os metadados persistidos no D1.
 - Estatísticas retornam `0` quando ainda não existem uploads, evitando valores nulos no frontend.
 
-### Visibilidade do repositório de assets
+### Visibilidade e entrega
 
-- **Público:** adequado para uso direto com jsDelivr e compartilhamento de arquivos estáticos.
-- **Privado:** indicado para conteúdo restrito, mas URLs públicas de CDN podem não funcionar como esperado. Não use jsDelivr como estratégia de entrega de dados privados.
-
-> 🔒 Nunca faça upload de backups, credenciais, dados pessoais, arquivos internos ou qualquer conteúdo que não possa se tornar público caso o repositório seja público.
+Os assets não dependem de links públicos do Google Drive. O Worker atua como proxy entre o cliente e o Drive, aplicando o fluxo de entrega configurado pela aplicação. Não envie backups, credenciais, dados pessoais ou outro conteúdo para o qual essa política de acesso não tenha sido definida e validada.
 
 ## API
 
@@ -266,7 +269,7 @@ Envie `multipart/form-data` com o arquivo no campo `image`, o projeto no campo `
 curl -X POST https://SUA_URL/api/upload \
   -H "Authorization: Bearer SEU_UPLOAD_TOKEN" \
   -F "project=meu-projeto" \
-  -F "image=@banner.webp"
+  -F "image=@video.mp4"
 ```
 
 Resposta típica:
@@ -275,13 +278,12 @@ Resposta típica:
 {
   "success": true,
   "urls": {
-    "cloudflare": "",
-    "jsdelivr": "https://cdn.jsdelivr.net/gh/USUARIO/REPOSITORIO@main/meu-projeto/2026/08/banner_123456789.webp",
-    "raw": "https://raw.githubusercontent.com/USUARIO/REPOSITORIO/main/meu-projeto/2026/08/banner_123456789.webp",
-    "github": "https://github.com/USUARIO/REPOSITORIO/blob/main/meu-projeto/2026/08/banner_123456789.webp"
+    "cloudflare": "/banner_123456789.mp4"
   }
 }
 ```
+
+O valor de `urls.cloudflare` é uma rota relativa retornada pela implementação. Use-o em conjunto com a origem do Worker ou com o domínio definido em `CDN_BASE_URL`, conforme a configuração da sua aplicação.
 
 ### Listar uploads
 
@@ -313,7 +315,7 @@ curl -X PUT https://SUA_URL/api/uploads \
   }'
 ```
 
-A operação cria o novo arquivo no GitHub, remove o arquivo anterior e atualiza os caminhos e URLs persistidos no D1.
+A operação renomeia o arquivo no Google Drive e atualiza os caminhos e metadados persistidos no D1.
 
 ### Excluir upload
 
@@ -328,34 +330,7 @@ curl -X DELETE https://SUA_URL/api/uploads \
   -d '{"id": 42}'
 ```
 
-A exclusão remove o conteúdo no GitHub e o registro correspondente no D1. Se o arquivo já não existir no GitHub, o registro D1 ainda poderá ser removido para reparar uma inconsistência histórica.
-
-## URLs de entrega
-
-Cada upload devolve URLs úteis para diferentes cenários.
-
-| URL | Uso recomendado |
-|---|---|
-| `github` | Visualização e auditoria no GitHub |
-| `raw` | Desenvolvimento, inspeção e consumo direto de conteúdo bruto |
-| `jsdelivr` | CDN pública para repositórios públicos GitHub |
-| `cloudflare` | URL opcional quando `CDN_BASE_URL` estiver configurada |
-
-### jsDelivr
-
-A URL jsDelivr segue esta estrutura:
-
-```text
-https://cdn.jsdelivr.net/gh/USUARIO/REPOSITORIO@BRANCH/caminho/do/arquivo.ext
-```
-
-Exemplo:
-
-```text
-https://cdn.jsdelivr.net/gh/meuusuario/minha-cdn-assets@main/imagens/2026/08/logo.webp
-```
-
-Para conteúdo imutável, considere usar tags ou commits na estratégia de publicação em vez de uma branch móvel, quando isso for compatível com seu fluxo.
+A exclusão remove o conteúdo no Google Drive e o registro correspondente no D1. Se o arquivo já não existir no Drive, o registro D1 ainda poderá ser removido para reparar uma inconsistência histórica.
 
 ## Domínio personalizado
 
@@ -369,7 +344,7 @@ Para usar um endereço como `cdn.seudominio.com`:
 6. Informe o subdomínio desejado e conclua o fluxo.
 7. Se usar o domínio como CDN de arquivos, configure `CDN_BASE_URL` como `https://cdn.seudominio.com`.
 
-> 📌 `CDN_BASE_URL` é opcional. Caso não seja configurada, o painel continua devolvendo URLs GitHub, Raw e jsDelivr normalmente.
+> 📌 `CDN_BASE_URL` é opcional. Caso não seja configurada, o Worker continua entregando os arquivos pela URL padrão `workers.dev`.
 
 ## Desenvolvimento local (opcional)
 
@@ -382,12 +357,13 @@ Esta seção é somente para quem deseja modificar o projeto. Ela não é necess
 - Git.
 - Wrangler CLI.
 - Conta Cloudflare e credenciais de desenvolvimento.
+- Projeto Google Cloud com Google Drive API e credenciais OAuth configuradas para a URL local utilizada no desenvolvimento.
 
 ### Instalação
 
 ```bash
-git clone https://github.com/samucamg/verodesk-cdn-github.git
-cd verodesk-cdn-github
+git clone https://github.com/samucamg/verodesk-cdn-gdrive.git
+cd verodesk-cdn-gdrive
 npm install
 cp .dev.vars.example .dev.vars
 ```
@@ -395,11 +371,14 @@ cp .dev.vars.example .dev.vars
 Edite `.dev.vars` somente no seu ambiente local:
 
 ```dotenv
-GITHUB_TOKEN=seu_token_de_desenvolvimento
+GOOGLE_CLIENT_ID=seu_client_id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=seu_client_secret_de_desenvolvimento
+GOOGLE_REDIRECT_URI=http://localhost:8787/api/auth/google/callback
 UPLOAD_TOKEN=um_token_local_longo_e_aleatorio
+CDN_BASE_URL=http://localhost:8787
 ```
 
-Nunca faça commit de `.dev.vars`.
+Cadastre a URI local `http://localhost:8787/api/auth/google/callback` nas credenciais OAuth de desenvolvimento, quando aplicável. Nunca faça commit de `.dev.vars`.
 
 ### Banco D1 local
 
@@ -437,24 +416,26 @@ O script de deploy executa validação TypeScript, aplica migrations remotas pel
 - [ ] O painel aceita `UPLOAD_TOKEN` válido.
 - [ ] O D1 está associado ao binding chamado exatamente `DB`.
 - [ ] A migration `0001_initial.sql` foi aplicada.
-- [ ] `GITHUB_USER`, `GITHUB_REPO` e `GITHUB_BRANCH` apontam para o destino correto.
-- [ ] `GITHUB_TOKEN` possui escrita no repositório de assets.
-- [ ] Um upload de teste aparece no repositório GitHub.
-- [ ] A URL jsDelivr abre o arquivo, quando o repositório é público.
+- [ ] `GOOGLE_CLIENT_ID` e `GOOGLE_REDIRECT_URI` correspondem às credenciais OAuth do Google Cloud.
+- [ ] `GOOGLE_CLIENT_SECRET` está cadastrado como secret no Worker.
+- [ ] A URI `https://seu-worker.workers.dev/api/auth/google/callback` está autorizada no Google Cloud.
+- [ ] O administrador concluiu o fluxo **Conectar Drive** e o `refresh_token` foi persistido no D1.
+- [ ] Um upload de teste aparece no Google Drive.
+- [ ] A URL de entrega do Worker abre o arquivo.
 
 ### Problemas comuns
 
 | Sintoma | Causa provável | Solução |
 |---|---|---|
 | `401 Não autorizado` | `UPLOAD_TOKEN` ausente ou inválido | Confira o token no painel ou no header `Authorization` |
-| `502 GitHub HTTP 401/403` | Token GitHub expirado, sem escrita ou repositório incorreto | Gere um novo PAT limitado ao repositório e atualize `GITHUB_TOKEN` |
-| `502 GitHub HTTP 404` | Usuário, repositório ou branch não existe | Revise `GITHUB_USER`, `GITHUB_REPO` e `GITHUB_BRANCH` |
-| `502 GitHub HTTP 422` | Nome/caminho inválido ou conflito ao gravar arquivo | Revise o projeto, nome do arquivo e existência de arquivo com o mesmo destino |
+| Erro no callback OAuth | `GOOGLE_REDIRECT_URI` não coincide com a URI autorizada | Compare a variável do Worker com a URI cadastrada nas credenciais OAuth do Google Cloud |
+| Acesso negado pelo Google | Consentimento não concluído, usuário inadequado ou escopo não autorizado | Clique em **Conectar Drive**, entre com a conta correta e revise a configuração da tela de consentimento e dos escopos |
+| Falha ao renovar acesso ao Drive | `GOOGLE_CLIENT_SECRET` incorreto ou `refresh_token` ausente/inválido | Atualize o secret, reconecte o Drive pelo painel e conclua a autorização novamente |
 | Erro de tabela D1 | Migration não foi aplicada ou binding está errado | Confirme `DB` e execute `npm run migrate:remote` |
-| Upload excede limite | Arquivo maior que 10 MB | Reduza, comprima ou divida o arquivo antes de enviar |
-| Extensão inválida | Tipo de arquivo fora da lista permitida | Use uma extensão suportada ou altere `ALLOWED_EXTENSIONS` no código |
-| jsDelivr não abre | Repositório privado, URL incorreta ou cache | Confirme visibilidade, branch e caminho do arquivo |
-| URL Cloudflare vazia | `CDN_BASE_URL` não foi configurada | É esperado; use jsDelivr/Raw ou configure um domínio próprio |
+| Upload excede limite | Arquivo maior que 1,5 GB | Reduza, comprima ou divida o arquivo antes de enviar |
+| Extensão inválida | Tipo de arquivo fora da lista permitida | Use `jpg`, `jpeg`, `png`, `gif`, `webp`, `svg`, `pdf`, `mp3`, `mp4` ou `mkv`, ou altere `ALLOWED_EXTENSIONS` no código |
+| Arquivo não é entregue | Arquivo removido do Drive, metadado inconsistente ou configuração do proxy incorreta | Confirme a existência do arquivo no Drive, o registro D1 e a rota de entrega do Worker |
+| URL Cloudflare vazia | `CDN_BASE_URL` não foi configurada | É esperado; use a URL padrão do Worker ou configure um domínio próprio |
 
 ## Contribuições
 
