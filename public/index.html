@@ -12,7 +12,7 @@
         .nav-menu { display: flex; gap: 1rem; align-items: center; }
         .nav-link { color: white; text-decoration: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 500; background: rgba(255,255,255,0.1); transition: 0.3s; }
         .nav-link:hover, .nav-link.active { background: rgba(255,255,255,0.25); }
-        .btn-connect { background: #28a745; color: white; text-decoration: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; transition: 0.3s; }
+        .btn-connect { background: #28a745; color: white; text-decoration: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; transition: 0.3s; cursor: pointer; border: none; font-size: 1rem; }
         .btn-connect:hover { background: #218838; }
         .btn-logout { background: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.3s; }
         .btn-logout:hover { background: #c82333; }
@@ -41,7 +41,7 @@
     <nav class="navbar">
         <a href="index.html" class="navbar-brand">CDN Manager (Edge)</a>
         <div class="nav-menu">
-            <a href="/api/auth/google" class="btn-connect" target="_blank">Conectar Drive</a>
+            <button id="btnConnectDrive" class="btn-connect">Conectar Drive</button>
             <a href="index.html" class="nav-link active">Upload</a>
             <a href="gallery.html" class="nav-link">Galeria</a>
             <button onclick="AuthManager.logout()" class="btn-logout">Sair</button>
@@ -97,6 +97,17 @@
     window.addEventListener('DOMContentLoaded', () => {
         AuthManager.requireAuth();
     });
+
+    document.getElementById('btnConnectDrive').addEventListener('click', (e) => {
+        e.preventDefault();
+        const token = AuthManager.getToken();
+        if(!token) {
+            alert('Faca login primeiro.');
+            return;
+        }
+        window.open('/api/auth/google?token=' + encodeURIComponent(token), '_blank');
+    });
+
     document.getElementById('uploadForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         
