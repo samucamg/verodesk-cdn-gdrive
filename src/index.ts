@@ -131,7 +131,7 @@ export default {
 
                     const accessToken = await getDriveAccessToken(env);
                     if (!accessToken) {
-                        return new Response(JSON.stringify({ success: false, error: 'Google Drive nao autenticado.' }), { status: 401, headers: defaultHeaders });
+                        return new Response(JSON.stringify({ success: false, error: 'Google Drive nao autenticado.' }), { status: 502, headers: defaultHeaders });
                     }
 
                     const initRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', {
