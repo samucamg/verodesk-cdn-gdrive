@@ -120,8 +120,7 @@ export default {
                     const safeName = originalName.replace(`.${ext}`, '').replace(/[^a-zA-Z0-9_-]/g, '-');
                     const newName = `${safeName}_${Date.now()}.${ext}`;
                     
-                    const mimeMap: Record<string, string> = { mp4: 'video/mp4', mkv: 'video/x-matroska', pdf: 'application/pdf', mp3: 'audio/mpeg', wav: 'audio/wav', jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml' };
-                    const mimeType = data.mimeType || mimeMap[ext] || 'application/octet-stream';
+                    const mimeType = data.mimeType || 'application/octet-stream';
                     
                     const accessToken = await getDriveAccessToken(env);
                     if (!accessToken) {
@@ -141,7 +140,7 @@ export default {
 
                     if (!initRes.ok) {
                         const errText = await initRes.text();
-                        return new Response(JSON.stringify({ success: false, error: `Falha ao abrir sessao no Drive (HTTP ${initRes.status}): ${errText}` }), { status: 502, headers: defaultHeaders });
+                        return new Response(JSON.stringify({ success: false, error: `Falha ao abrir sessao no Drive (HTTP ${initRes.status})` }), { status: 502, headers: defaultHeaders });
                     }
 
                     const uploadUrl = initRes.headers.get('Location');
@@ -182,7 +181,8 @@ export default {
                     if (driveRes.ok) {
                         const driveData = await driveRes.json() as any;
                         const driveFileId = driveData.id;
-                        const totalSize = parseInt(contentRange.split('/')[1], 10) || 0;
+                        const totalSizeMatch = contentRange.match(/\/(\d+)$/);
+                        const totalSize = totalSizeMatch ? parseInt(totalSizeMatch[1], 10) : 0;
 
                         await env.DB.prepare(
                             `INSERT INTO uploads (project_key, project_name, original_name, file_name, file_size, file_extension, mime_type, drive_file_id, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -194,7 +194,7 @@ export default {
                     }
 
                     const errText = await driveRes.text();
-                    return new Response(JSON.stringify({ success: false, error: `Falha Drive PUT (HTTP ${driveRes.status}): ${errText}` }), { status: 502, headers: defaultHeaders });
+                    return new Response(JSON.stringify({ success: false, error: `Falha Drive PUT (HTTP ${driveRes.status})` }), { status: 502, headers: defaultHeaders });
                 }
 
                 if (url.pathname === '/api/uploads' && request.method === 'PUT') {

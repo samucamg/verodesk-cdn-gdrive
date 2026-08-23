@@ -119,9 +119,8 @@
         resultDiv.innerHTML = '<strong>Iniciando processamento...</strong><br><br>';
         
         const files = Array.from(fileInput.files);
-        const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB exatos para o Drive
+        const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB exatos
         
-        // Criar UI containers para os arquivos
         const progressUIs = {};
         files.forEach((file, idx) => {
             const id = `file-ui-${idx}`;
@@ -138,7 +137,6 @@
             };
         });
 
-        // Loop Sequencial de Upload
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             const ui = progressUIs[`file-ui-${i}`];
@@ -146,11 +144,10 @@
             try {
                 ui.status.innerHTML = 'Solicitando sessao ao Google Drive...';
                 
-                // 1. INIT
                 const initRes = await fetch('/api/upload/init', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ originalName: file.name, size: file.size, project, mimeType: file.type })
+                    body: JSON.stringify({ originalName: file.name, size: file.size, project, mimeType: file.type || 'application/octet-stream' })
                 });
                 
                 if (initRes.status === 401) { AuthManager.logout(); throw new Error('Token invalido'); }
@@ -159,7 +156,6 @@
                 
                 const { sessionId, newName, ext, mimeType } = initData;
                 
-                // 2. CHUNKS
                 let start = 0;
                 let finalData = null;
                 
