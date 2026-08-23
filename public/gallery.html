@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galeria - CDN Manager (Edge)</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; min-height: 100vh; }
+        .navbar { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.15); }
+        .navbar-brand { color: white; text-decoration: none; font-size: 1.3rem; font-weight: 600; }
+        .nav-menu { display: flex; gap: 1rem; align-items: center; }
+        .nav-link { color: white; text-decoration: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 500; background: rgba(255,255,255,0.1); transition: 0.3s; }
+        .nav-link:hover, .nav-link.active { background: rgba(255,255,255,0.25); }
+        .btn-logout { background: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.3s; }
+        
+        .container { max-width: 1400px; margin: 2rem auto; padding: 0 1.5rem; }
+        .dashboard-header { display: flex; gap: 1.5rem; margin-bottom: 2rem; flex-wrap: wrap; }
+        .filters { background: white; padding: 1.5rem; border-radius: 12px; display: flex; gap: 1rem; box-shadow: 0 2px 10px rgba(0,0,0,0.08); flex: 1; align-items: center; }
+        .filters select { padding: 0.75rem; border-radius: 8px; border: 2px solid #e0e6ed; font-size: 1rem; flex-grow: 1; outline: none; }
+        .stats-card { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 1.5rem 2rem; border-radius: 12px; display: flex; gap: 3rem; box-shadow: 0 4px 15px rgba(30, 60, 114, 0.2); align-items: center; justify-content: center; }
+        .stat-item { text-align: center; }
+        .stat-value { font-size: 1.8rem; font-weight: bold; }
+        .stat-label { font-size: 0.75rem; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+        .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.5rem; }
+        .image-card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); transition: transform 0.3s; cursor: pointer; }
+        .image-card:hover { transform: translateY(-5px); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }
+        
+        .card-thumb-img { width: 100%; height: 200px; object-fit: cover; border-bottom: 1px solid #eee; }
+        .card-thumb-icon { width: 100%; height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; font-size: 1.2rem; border-bottom: 1px solid #eee; }
+        .icon-pdf { background: #fce4e4; color: #d93025; }
+        .icon-audio { background: #e8f0fe; color: #1a73e8; }
+        .icon-generic { background: #e0e6ed; color: #495057; }
+        .icon-emoji { font-size: 2.5rem; margin-bottom: 0.5rem; }
+        .image-info { padding: 1rem; }
+        .image-info h3 { font-size: 0.95rem; margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #2c3e50; }
+        .project-tag { display: inline-block; padding: 0.2rem 0.6rem; background: #e0e6ed; color: #495057; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+        .loading { grid-column: 1 / -1; text-align: center; padding: 4rem; color: #6c757d; font-size: 1.2rem; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); overflow: auto; align-items: flex-start; justify-content: center; padding: 2rem; }
+        .modal-content { background: white; width: 100%; max-width: 800px; border-radius: 12px; margin-top: 2rem; overflow: hidden; }
+        .modal-header { padding: 1.5rem; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; }
+        .modal-header h2 { font-size: 1.4rem; }
+        .close { font-size: 2rem; color: white; cursor: pointer; background: none; border: none; line-height: 1; }
+        .modal-body { padding: 2rem; }
+        .modal-image-container { text-align: center; margin-bottom: 2rem; background: #f8f9fa; border-radius: 8px; padding: 1rem; }
+        .modal-image { max-width: 100%; max-height: 400px; object-fit: contain; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .no-preview { padding: 4rem; color: #6c757d; font-weight: bold; font-size: 1.2rem; }
+        
+        .rename-section { background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; }
+        .rename-section label { display: block; font-size: 0.85rem; color: #856404; font-weight: 600; margin-bottom: 0.5rem; }
+        .rename-group { display: flex; gap: 0.5rem; }
+        .rename-input { flex: 1; padding: 0.75rem; border: 2px solid #ffc107; border-radius: 5px; font-family: monospace; font-size: 0.9rem; }
+        .btn-save-rename { padding: 0.75rem 1.5rem; background: #28a745; color: white; border: none; border-radius: 5px; font-weight: 600; cursor: pointer; }
+        
+        .modal-info { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+        .info-item { padding: 1rem; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #2a5298; }
+        .info-item label { display: block; font-size: 0.75rem; color: #6c757d; margin-bottom: 0.5rem; text-transform: uppercase; font-weight: 600; }
+        .info-item .value { font-size: 0.9rem; color: #2c3e50; word-break: break-all; font-family: monospace; }
+        
+        .modal-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+        .btn { padding: 1rem; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 1rem; }
+        .btn-copy-cf { background: #28a745; color: white; }
+        .btn-delete { background: #dc3545; color: white; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="index.html" class="navbar-brand">CDN Manager (Edge)</a>
+        <div class="nav-menu">
+            <a href="index.html" class="nav-link">Upload</a>
+            <a href="gallery.html" class="nav-link active">Galeria</a>
+            <button onclick="AuthManager.logout()" class="btn-logout">Sair</button>
+        </div>
+    </nav>
+    <div class="container">
+        <div class="dashboard-header">
+            <div class="filters">
+                <select id="projectFilter" onchange="loadGallery()">
+                    <option value="all">Todas as Categorias</option>
+                </select>
+            </div>
+            <div class="stats-card" id="statsCard" style="opacity: 0.5;">
+                <div class="stat-item"><div class="stat-value" id="statsTotal">...</div><div class="stat-label">Arquivos</div></div>
+                <div class="stat-item"><div class="stat-value" id="statsSize">...</div><div class="stat-label">Armazenamento</div></div>
+            </div>
+        </div>
+        <div id="galleryGrid" class="gallery"><div class="loading">Carregando arquivos...</div></div>
+    </div>
+    <div id="imageModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Detalhes do Arquivo</h2>
+                <button class="close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-image-container" id="modalImgContainer"></div>
+                <div class="rename-section">
+                    <label>Renomear arquivo (D1 + Drive):</label>
+                    <div class="rename-group">
+                        <input type="text" id="renameInput" class="rename-input" placeholder="Novo nome sem extensao">
+                        <button class="btn-save-rename" id="btnSubmitRename" onclick="submitRename()">Salvar</button>
+                    </div>
+                </div>
+                <div class="modal-info" id="modalInfoGrid"></div>
+                <div class="modal-actions">
+                    <button class="btn btn-copy-cf" onclick="copyUrl()">Copiar Link do Dominio</button>
+                    <button class="btn btn-delete" onclick="deleteImage()">Deletar Arquivo</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="auth.js"></script>
+    <script>
+        let currentImage = null;
+        let knownProjects = new Set();
+        
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + ['B', 'KB', 'MB', 'GB'][i];
+        }
+        
+        async function loadStats() {
+            try {
+                const token = await AuthManager.requireAuth();
+                const res = await fetch('/api/stats', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.success && data.stats) {
+                    document.getElementById('statsTotal').textContent = data.stats.total || 0;
+                    document.getElementById('statsSize').textContent = formatBytes(data.stats.total_size || 0);
+                    document.getElementById('statsCard').style.opacity = '1';
+                }
+            } catch (err) {}
+        }
+        
+        function updateProjectFilterOptions(uploads) {
+            const filterSelect = document.getElementById('projectFilter');
+            const currentSelected = filterSelect.value;
+            let updated = false;
+            uploads.forEach(img => {
+                if (img.project_key && !knownProjects.has(img.project_key)) {
+                    knownProjects.add(img.project_key);
+                    const opt = document.createElement('option');
+                    opt.value = img.project_key;
+                    opt.textContent = img.project_name || img.project_key;
+                    filterSelect.appendChild(opt);
+                    updated = true;
+                }
+            });
+            if (updated) {
+                filterSelect.value = currentSelected;
+            }
+        }
+        
+        async function loadGallery() {
+            const token = await AuthManager.requireAuth();
+            const project = document.getElementById('projectFilter').value;
+            const grid = document.getElementById('galleryGrid');
+            
+            grid.innerHTML = '<div class="loading">Carregando arquivos...</div>';
+            
+            try {
+                const res = await fetch(`/api/uploads?project=${project}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!res.ok) throw new Error(res.status === 401 ? 'Nao autorizado' : 'Erro na API');
+                
+                const data = await res.json();
+                if (!data.uploads || data.uploads.length === 0) return grid.innerHTML = '<div class="loading">Nenhum arquivo encontrado.</div>';
+                
+                window.galleryData = data.uploads;
+                updateProjectFilterOptions(data.uploads);
+                
+                grid.innerHTML = data.uploads.map((img, index) => {
+                    const ext = img.file_extension ? img.file_extension.toLowerCase() : img.file_name.split('.').pop().toLowerCase();
+                    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
+                    
+                    let visualHtml = '';
+                    if (isImage) {
+                        visualHtml = `<img src="${window.location.origin}/${img.file_name}" class="card-thumb-img" loading="lazy">`;
+                    } else if (ext === 'pdf') {
+                        visualHtml = `<div class="card-thumb-icon icon-pdf"><span class="icon-emoji">PDF</span></div>`;
+                    } else if (['mp3', 'wav', 'ogg', 'mp4', 'mkv'].includes(ext)) {
+                        visualHtml = `<div class="card-thumb-icon icon-audio"><span class="icon-emoji">MEDIA</span></div>`;
+                    } else {
+                        visualHtml = `<div class="card-thumb-icon icon-generic"><span class="icon-emoji">${ext.toUpperCase()}</span></div>`;
+                    }
+                    return `
+                    <div class="image-card" onclick="openModal(${index})">
+                        ${visualHtml}
+                        <div class="image-info">
+                            <h3 title="${img.original_name}">${img.original_name}</h3>
+                            <span class="project-tag">${img.project_name}</span>
+                        </div>
+                    </div>`;
+                }).join('');
+            } catch (err) {
+                grid.innerHTML = `<div class="loading" style="color:#dc3545;">Erro: ${err.message}</div>`;
+                if (err.message === 'Nao autorizado') AuthManager.logout();
+            }
+        }
+        
+        function openModal(index) {
+            currentImage = window.galleryData[index];
+            const customDomainUrl = `${window.location.origin}/${currentImage.file_name}`;
+            const ext = currentImage.file_extension ? currentImage.file_extension.toLowerCase() : currentImage.file_name.split('.').pop().toLowerCase();
+            const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
+            
+            const imgContainer = document.getElementById('modalImgContainer');
+            if (isImage) {
+                imgContainer.innerHTML = `<img id="modalImg" class="modal-image" src="${customDomainUrl}">`;
+            } else {
+                imgContainer.innerHTML = `<div class="no-preview">Sem visualizacao pre-via para formato .${ext.toUpperCase()}</div>`;
+            }
+            
+            document.getElementById('renameInput').value = currentImage.file_name.split('.')[0];
+            document.getElementById('modalInfoGrid').innerHTML = `
+                <div class="info-item"><label>Nome Original</label><div class="value">${currentImage.original_name}</div></div>
+                <div class="info-item"><label>Projeto / Categoria</label><div class="value">${currentImage.project_name}</div></div>
+                <div class="info-item"><label>Tamanho</label><div class="value">${formatBytes(currentImage.file_size)}</div></div>
+                <div class="info-item"><label>Data Upload</label><div class="value">${new Date(currentImage.upload_date).toLocaleString('pt-BR')}</div></div>
+                <div class="info-item" style="grid-column: 1 / -1;"><label>Seu Dominio (Edge CDN)</label><div class="value">${customDomainUrl}</div></div>
+            `;
+            document.getElementById('imageModal').style.display = 'flex';
+        }
+        
+        function closeModal() { document.getElementById('imageModal').style.display = 'none'; currentImage = null; }
+        
+        async function copyUrl() {
+            if (!currentImage) return;
+            const url = `${window.location.origin}/${currentImage.file_name}`;
+            try { await navigator.clipboard.writeText(url); alert('URL copiada!'); } catch (e) { alert('Erro ao copiar URL.'); }
+        }
+        
+        async function submitRename() {
+            if (!currentImage) return;
+            const newName = document.getElementById('renameInput').value.trim();
+            if (!newName) return alert('O nome nao pode ser vazio.');
+            
+            const btn = document.getElementById('btnSubmitRename');
+            const token = await AuthManager.requireAuth();
+            
+            btn.disabled = true; btn.textContent = 'Salvando...';
+            try {
+                const res = await fetch('/api/uploads', {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: currentImage.id, new_name: newName })
+                });
+                const data = await res.json();
+                if (data.success) { closeModal(); loadGallery(); } else { alert(`Erro: ${data.error}`); }
+            } catch (err) { alert(`Erro de rede: ${err.message}`); }
+            finally { btn.disabled = false; btn.textContent = 'Salvar'; }
+        }
+        
+        async function deleteImage() {
+            if (!currentImage) return;
+            if (!confirm(`Deletar definitivamente o arquivo ${currentImage.original_name}?`)) return;
+            
+            const token = await AuthManager.requireAuth();
+            try {
+                const res = await fetch('/api/uploads', {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: currentImage.id })
+                });
+                const data = await res.json();
+                if (data.success) { closeModal(); loadGallery(); loadStats(); } else { alert(`Erro: ${data.error}`); }
+            } catch (err) { alert(`Erro de rede: ${err.message}`); }
+        }
+        
+        window.addEventListener('DOMContentLoaded', () => { loadGallery(); loadStats(); });
+        window.onclick = function(event) { if (event.target == document.getElementById('imageModal')) closeModal(); }
+    </script>
+</body>
+</html>

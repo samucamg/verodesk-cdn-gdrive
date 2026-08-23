@@ -1,0 +1,19 @@
+{
+  "name": "cdn-manager-worker",
+  "version": "1.0.0",
+  "description": "Serverless GitHub CDN Manager",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "typecheck": "tsc --noEmit",
+    "migrate:local": "wrangler d1 migrations apply DB --local",
+    "migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "deploy": "npm run typecheck && npm run migrate:remote && wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260820.1",
+    "@types/node": "^26.2.0",
+    "typescript": "^5.0.0",
+    "wrangler": "^4.125.0"
+  }
+}

@@ -1,0 +1,16 @@
+name = "verodesk-cdn-gdrive"
+main = "src/index.ts"
+compatibility_date = "2024-08-21"
+compatibility_flags = [ "nodejs_compat" ]
+
+[assets]
+directory = "./public"
+
+[vars]
+GOOGLE_REDIRECT_URI = ""
+
+[[d1_databases]]
+binding = "DB"
+database_name = "verodesk_cdn_db"
+database_id = "PREENCHIDO_PELO_DEPLOY_BUTTON"
+preview_database_id = "DB"

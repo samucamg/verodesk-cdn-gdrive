@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CDN Uploader - Cloudflare Edge</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; min-height: 100vh; }
+        .navbar { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.15); }
+        .navbar-brand { color: white; text-decoration: none; font-size: 1.3rem; font-weight: 600; }
+        .nav-menu { display: flex; gap: 1rem; align-items: center; }
+        .nav-link { color: white; text-decoration: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 500; background: rgba(255,255,255,0.1); transition: 0.3s; }
+        .nav-link:hover, .nav-link.active { background: rgba(255,255,255,0.25); }
+        .btn-connect { background: #28a745; color: white; text-decoration: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; transition: 0.3s; }
+        .btn-connect:hover { background: #218838; }
+        .btn-logout { background: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.3s; }
+        .btn-logout:hover { background: #c82333; }
+        .container { max-width: 900px; margin: 3rem auto; padding: 0 1.5rem; }
+        .upload-card { background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); padding: 2.5rem; }
+        .card-header { text-align: center; margin-bottom: 2rem; }
+        .card-header h1 { color: #1e3c72; font-size: 2rem; margin-bottom: 0.5rem; }
+        .card-header p { color: #6c757d; font-size: 1rem; }
+        .form-group { margin-bottom: 1.5rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; color: #2c3e50; font-weight: 600; font-size: 1rem; }
+        .form-control { width: 100%; padding: 0.875rem; border: 2px solid #e0e6ed; border-radius: 8px; font-size: 1rem; transition: all 0.3s; }
+        .form-control:focus { outline: none; border-color: #2a5298; box-shadow: 0 0 0 3px rgba(42,82,152,0.1); }
+        .btn-upload { width: 100%; padding: 1rem; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; border: none; border-radius: 8px; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: all 0.3s; }
+        .btn-upload:disabled { background: #95a5a6; cursor: not-allowed; }
+        .alert { margin-top: 2rem; padding: 1.25rem; border-radius: 8px; display: none; font-size: 0.95rem; }
+        .alert.show { display: block; }
+        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .alert-info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .result-urls { margin-top: 1rem; font-family: 'Courier New', monospace; font-size: 0.9rem; line-height: 2; }
+        .result-urls strong { display: block; margin-top: 0.75rem; color: #155724; }
+        .result-urls code { display: block; background: #f8f9fa; padding: 0.5rem; border-radius: 5px; margin-top: 0.25rem; word-break: break-all; border: 1px solid #dee2e6; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="index.html" class="navbar-brand">CDN Manager (Edge)</a>
+        <div class="nav-menu">
+            <a href="/api/auth/google" class="btn-connect" target="_blank">Conectar Drive</a>
+            <a href="index.html" class="nav-link active">Upload</a>
+            <a href="gallery.html" class="nav-link">Galeria</a>
+            <button onclick="AuthManager.logout()" class="btn-logout">Sair</button>
+        </div>
+    </nav>
+    <div class="container">
+        <div class="upload-card">
+            <div class="card-header">
+                <h1>CDN Uploader</h1>
+                <p>Envie arquivos via API Cloudflare Worker para o Google Drive</p>
+            </div>
+            <form id="uploadForm">
+                <div class="form-group">
+                    <label for="project">Categoria / Projeto</label>
+                    <select id="project" class="form-control" onchange="toggleCustomProject(this.value)" required>
+                        <option value="geral">Geral</option>
+                        <option value="imagens">Imagens</option>
+                        <option value="documentos">Documentos</option>
+                        <option value="audios">Audios</option>
+                        <option value="videos">Videos</option>
+                        <option value="custom">+ Nova Categoria / Pasta...</option>
+                    </select>
+                </div>
+                <div class="form-group" id="customProjectGroup" style="display: none;">
+                    <label for="customProject">Nome da Nova Categoria (Sem espacos/acentos)</label>
+                    <input type="text" id="customProject" class="form-control" placeholder="ex: banners-2026" pattern="[a-zA-Z0-9_-]{1,64}">
+                </div>
+                <div class="form-group">
+                    <label for="file">Selecione os Arquivos</label>
+                    <input type="file" id="file" class="form-control" accept="image/*,audio/mp3,audio/wav,video/mp4,video/mkv,application/pdf" multiple required>
+                </div>
+                <button type="submit" class="btn-upload" id="submitBtn">Enviar para CDN</button>
+            </form>
+            <div id="result" class="alert"></div>
+        </div>
+    </div>
+    <script src="auth.js"></script>
+    
+    <script>
+    function toggleCustomProject(val) {
+        const group = document.getElementById('customProjectGroup');
+        const input = document.getElementById('customProject');
+        if (val === 'custom') {
+            group.style.display = 'block';
+            input.required = true;
+            input.focus();
+        } else {
+            group.style.display = 'none';
+            input.required = false;
+            input.value = '';
+        }
+    }
+    window.addEventListener('DOMContentLoaded', () => {
+        AuthManager.requireAuth();
+    });
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const submitBtn = document.getElementById('submitBtn');
+        const resultDiv = document.getElementById('result');
+        const fileInput = document.getElementById('file');
+        
+        if (fileInput.files.length === 0) return;
+        
+        const token = await AuthManager.requireAuth();
+        
+        let project = document.getElementById('project').value;
+        if (project === 'custom') {
+            const customVal = document.getElementById('customProject').value.trim().toLowerCase();
+            const safeProject = customVal.replace(/[^a-zA-Z0-9_-]/g, '-');
+            if (!safeProject) {
+                alert('Informe um nome valido para a categoria.');
+                return;
+            }
+            project = safeProject;
+        }
+        submitBtn.disabled = true;
+        let successCount = 0;
+        let errorCount = 0;
+        let resultsHtml = '';
+        
+        const files = Array.from(fileInput.files);
+        const totalFiles = files.length;
+        
+        resultDiv.className = 'alert alert-info show';
+        
+        for (let i = 0; i < totalFiles; i++) {
+            const file = files[i];
+            resultDiv.innerHTML = `Enviando arquivo ${i + 1} de ${totalFiles}: <strong>${file.name}</strong>...`;
+            
+            const formData = new FormData();
+            formData.append('image', file);
+            formData.append('project', project);
+            formData.append('token', token);
+            
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+                
+                if (response.status === 401) {
+                    AuthManager.logout();
+                    throw new Error('Nao autorizado. Faca login novamente.');
+                }
+                const text = await response.text();
+                try {
+                    const data = JSON.parse(text);
+                    if (data.success) {
+                        successCount++;
+                        resultsHtml += `<strong>[OK] ${file.name}</strong><code>${window.location.origin}${data.urls.cloudflare}</code>`;
+                    } else {
+                        errorCount++;
+                        resultsHtml += `<strong>[ERRO] ${file.name}:</strong> ${data.error}<br>`;
+                    }
+                } catch (parseError) {
+                    errorCount++;
+                    resultsHtml += `<strong>[ERRO] ${file.name}:</strong> Falha no parse JSON<br>`;
+                }
+            } catch (error) {
+                errorCount++;
+                resultsHtml += `<strong>[ERRO] ${file.name}:</strong> ${error.message}<br>`;
+            }
+        }
+        
+        if (successCount > 0 && errorCount === 0) {
+            resultDiv.className = 'alert alert-success show';
+            resultDiv.innerHTML = `<strong>Todos os ${successCount} uploads concluidos!</strong><div class="result-urls">${resultsHtml}</div>`;
+            fileInput.value = '';
+        } else {
+            resultDiv.className = 'alert alert-error show';
+            resultDiv.innerHTML = `<strong>Finalizado (${successCount} OK, ${errorCount} Erros)</strong><div class="result-urls">${resultsHtml}</div>`;
+        }
+        
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Enviar para CDN';
+    });
+    </script>
+</body>
+</html>
