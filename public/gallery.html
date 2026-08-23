@@ -12,6 +12,10 @@
         .nav-menu { display: flex; gap: 1rem; align-items: center; }
         .nav-link { color: white; text-decoration: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 500; background: rgba(255,255,255,0.1); transition: 0.3s; }
         .nav-link:hover, .nav-link.active { background: rgba(255,255,255,0.25); }
+        .btn-connect { background: #28a745; color: white; text-decoration: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; transition: 0.3s; cursor: pointer; border: none; font-size: 1rem; }
+        .btn-connect:hover { background: #218838; }
+        .btn-connect.connected { background: #17a2b8; }
+        .btn-connect.connected:hover { background: #138496; }
         .btn-logout { background: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.3s; }
         
         .container { max-width: 1400px; margin: 2rem auto; padding: 0 1.5rem; }
@@ -22,6 +26,7 @@
         .stat-item { text-align: center; }
         .stat-value { font-size: 1.8rem; font-weight: bold; }
         .stat-label { font-size: 0.75rem; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+        
         .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.5rem; }
         .image-card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); transition: transform 0.3s; cursor: pointer; }
         .image-card:hover { transform: translateY(-5px); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }
@@ -36,6 +41,7 @@
         .image-info h3 { font-size: 0.95rem; margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #2c3e50; }
         .project-tag { display: inline-block; padding: 0.2rem 0.6rem; background: #e0e6ed; color: #495057; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
         .loading { grid-column: 1 / -1; text-align: center; padding: 4rem; color: #6c757d; font-size: 1.2rem; }
+        
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); overflow: auto; align-items: flex-start; justify-content: center; padding: 2rem; }
         .modal-content { background: white; width: 100%; max-width: 800px; border-radius: 12px; margin-top: 2rem; overflow: hidden; }
         .modal-header { padding: 1.5rem; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; }
@@ -57,16 +63,18 @@
         .info-item label { display: block; font-size: 0.75rem; color: #6c757d; margin-bottom: 0.5rem; text-transform: uppercase; font-weight: 600; }
         .info-item .value { font-size: 0.9rem; color: #2c3e50; word-break: break-all; font-family: monospace; }
         
-        .modal-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
-        .btn { padding: 1rem; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 1rem; }
-        .btn-copy-cf { background: #28a745; color: white; }
-        .btn-delete { background: #dc3545; color: white; }
+        .modal-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+        .btn { padding: 1rem; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 1rem; color: white; }
+        .btn-copy-cf { background: #28a745; }
+        .btn-embed { background: #17a2b8; }
+        .btn-delete { background: #dc3545; }
     </style>
 </head>
 <body>
     <nav class="navbar">
         <a href="index.html" class="navbar-brand">CDN Manager (Edge)</a>
         <div class="nav-menu">
+            <button id="btnConnectDrive" class="btn-connect">Verificando Drive...</button>
             <a href="index.html" class="nav-link">Upload</a>
             <a href="gallery.html" class="nav-link active">Galeria</a>
             <button onclick="AuthManager.logout()" class="btn-logout">Sair</button>
@@ -86,6 +94,7 @@
         </div>
         <div id="galleryGrid" class="gallery"><div class="loading">Carregando arquivos...</div></div>
     </div>
+    
     <div id="imageModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -103,16 +112,39 @@
                 </div>
                 <div class="modal-info" id="modalInfoGrid"></div>
                 <div class="modal-actions">
-                    <button class="btn btn-copy-cf" onclick="copyUrl()">Copiar Link do Dominio</button>
+                    <button class="btn btn-copy-cf" onclick="copyUrl()">Copiar URL</button>
+                    <button class="btn btn-embed" onclick="copyEmbed()">Copiar Embed</button>
                     <button class="btn btn-delete" onclick="deleteImage()">Deletar Arquivo</button>
                 </div>
             </div>
         </div>
     </div>
+
     <script src="auth.js"></script>
     <script>
         let currentImage = null;
         let knownProjects = new Set();
+
+        async function checkDriveStatus() {
+            const btn = document.getElementById('btnConnectDrive');
+            try {
+                const token = await AuthManager.requireAuth();
+                const res = await fetch('/api/auth/google/status', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+                if (data.success && data.connected) {
+                    btn.textContent = 'Drive Conectado (Reconectar)';
+                    btn.classList.add('connected');
+                } else {
+                    btn.textContent = 'Conectar Drive';
+                    btn.classList.remove('connected');
+                }
+            } catch (err) {
+                btn.textContent = 'Conectar Drive';
+                btn.classList.remove('connected');
+            }
+        }
         
         function formatBytes(bytes) {
             if (bytes === 0) return '0 B';
@@ -138,6 +170,7 @@
             const filterSelect = document.getElementById('projectFilter');
             const currentSelected = filterSelect.value;
             let updated = false;
+            
             uploads.forEach(img => {
                 if (img.project_key && !knownProjects.has(img.project_key)) {
                     knownProjects.add(img.project_key);
@@ -148,9 +181,7 @@
                     updated = true;
                 }
             });
-            if (updated) {
-                filterSelect.value = currentSelected;
-            }
+            if (updated) { filterSelect.value = currentSelected; }
         }
         
         async function loadGallery() {
@@ -159,7 +190,6 @@
             const grid = document.getElementById('galleryGrid');
             
             grid.innerHTML = '<div class="loading">Carregando arquivos...</div>';
-            
             try {
                 const res = await fetch(`/api/uploads?project=${project}`, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (!res.ok) throw new Error(res.status === 401 ? 'Nao autorizado' : 'Erro na API');
@@ -178,12 +208,13 @@
                     if (isImage) {
                         visualHtml = `<img src="${window.location.origin}/${img.file_name}" class="card-thumb-img" loading="lazy">`;
                     } else if (ext === 'pdf') {
-                        visualHtml = `<div class="card-thumb-icon icon-pdf"><span class="icon-emoji">PDF</span></div>`;
+                        visualHtml = `<div class="card-thumb-icon icon-pdf"><span class="icon-emoji">📄</span></div>`;
                     } else if (['mp3', 'wav', 'ogg', 'mp4', 'mkv'].includes(ext)) {
-                        visualHtml = `<div class="card-thumb-icon icon-audio"><span class="icon-emoji">MEDIA</span></div>`;
+                        visualHtml = `<div class="card-thumb-icon icon-audio"><span class="icon-emoji">▶️</span></div>`;
                     } else {
                         visualHtml = `<div class="card-thumb-icon icon-generic"><span class="icon-emoji">${ext.toUpperCase()}</span></div>`;
                     }
+                    
                     return `
                     <div class="image-card" onclick="openModal(${index})">
                         ${visualHtml}
@@ -203,13 +234,29 @@
             currentImage = window.galleryData[index];
             const customDomainUrl = `${window.location.origin}/${currentImage.file_name}`;
             const ext = currentImage.file_extension ? currentImage.file_extension.toLowerCase() : currentImage.file_name.split('.').pop().toLowerCase();
+            
             const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
+            const isVideo = ['mp4', 'mkv'].includes(ext);
+            const isAudio = ['mp3', 'wav', 'ogg'].includes(ext);
             
             const imgContainer = document.getElementById('modalImgContainer');
+            
             if (isImage) {
                 imgContainer.innerHTML = `<img id="modalImg" class="modal-image" src="${customDomainUrl}">`;
+            } else if (isVideo) {
+                imgContainer.innerHTML = `
+                    <video controls class="modal-image" style="width: 100%; max-height: 400px; background: #000;">
+                        <source src="${customDomainUrl}" type="video/${ext === 'mkv' ? 'webm' : ext}">
+                        Seu navegador nao suporta o elemento de video.
+                    </video>`;
+            } else if (isAudio) {
+                imgContainer.innerHTML = `
+                    <audio controls style="width: 100%; margin-top: 2rem;">
+                        <source src="${customDomainUrl}" type="audio/${ext === 'mp3' ? 'mpeg' : ext}">
+                        Seu navegador nao suporta o elemento de audio.
+                    </audio>`;
             } else {
-                imgContainer.innerHTML = `<div class="no-preview">Sem visualizacao pre-via para formato .${ext.toUpperCase()}</div>`;
+                imgContainer.innerHTML = `<div class="no-preview">Visualizacao nao disponivel para formato .${ext.toUpperCase()}</div>`;
             }
             
             document.getElementById('renameInput').value = currentImage.file_name.split('.')[0];
@@ -223,12 +270,39 @@
             document.getElementById('imageModal').style.display = 'flex';
         }
         
-        function closeModal() { document.getElementById('imageModal').style.display = 'none'; currentImage = null; }
+        function closeModal() { 
+            document.getElementById('imageModal').style.display = 'none'; 
+            document.getElementById('modalImgContainer').innerHTML = '';
+            currentImage = null; 
+        }
         
         async function copyUrl() {
             if (!currentImage) return;
             const url = `${window.location.origin}/${currentImage.file_name}`;
             try { await navigator.clipboard.writeText(url); alert('URL copiada!'); } catch (e) { alert('Erro ao copiar URL.'); }
+        }
+
+        async function copyEmbed() {
+            if (!currentImage) return;
+            const url = `${window.location.origin}/${currentImage.file_name}`;
+            const ext = currentImage.file_extension ? currentImage.file_extension.toLowerCase() : currentImage.file_name.split('.').pop().toLowerCase();
+            
+            const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext);
+            const isVideo = ['mp4', 'mkv'].includes(ext);
+            const isAudio = ['mp3', 'wav', 'ogg'].includes(ext);
+
+            let embedCode = '';
+            if (isVideo) {
+                embedCode = `<video controls width="100%"><source src="${url}" type="video/${ext === 'mkv' ? 'webm' : ext}"></video>`;
+            } else if (isAudio) {
+                embedCode = `<audio controls style="width:100%;"><source src="${url}" type="audio/${ext === 'mp3' ? 'mpeg' : ext}"></audio>`;
+            } else if (isImage) {
+                embedCode = `<img src="${url}" alt="${currentImage.original_name}" style="max-width: 100%; height: auto;">`;
+            } else {
+                embedCode = `<a href="${url}" target="_blank">Download de arquivo: ${currentImage.original_name}</a>`;
+            }
+
+            try { await navigator.clipboard.writeText(embedCode); alert('Codigo HTML de Incorporacao copiado com sucesso!'); } catch (e) { alert('Erro ao copiar Embed.'); }
         }
         
         async function submitRename() {
@@ -268,8 +342,19 @@
             } catch (err) { alert(`Erro de rede: ${err.message}`); }
         }
         
-        window.addEventListener('DOMContentLoaded', () => { loadGallery(); loadStats(); });
-        window.onclick = function(event) { if (event.target == document.getElementById('imageModal')) closeModal(); }
+        window.addEventListener('DOMContentLoaded', async () => { 
+            await AuthManager.requireAuth();
+            await checkDriveStatus();
+            loadGallery(); 
+            loadStats(); 
+        });
+
+        document.getElementById('btnConnectDrive').addEventListener('click', (e) => {
+            e.preventDefault();
+            const token = AuthManager.getToken();
+            if(!token) return alert('Faca login primeiro.');
+            window.open('/api/auth/google?token=' + encodeURIComponent(token), '_blank');
+        });
     </script>
 </body>
 </html>

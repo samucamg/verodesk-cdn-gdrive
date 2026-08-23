@@ -4,3 +4,4 @@ dist/
 *.bak
 *.local
 .env
+.dev.vars

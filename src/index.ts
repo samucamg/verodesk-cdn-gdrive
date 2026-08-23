@@ -15,7 +15,7 @@ const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf', '
 async function getDriveAccessToken(env: Env): Promise<string | null> {
     const tokenRecord = await env.DB.prepare("SELECT value FROM settings WHERE key = 'gdrive_refresh_token'").first();
     if (!tokenRecord) return null;
-    
+
     const res = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -26,7 +26,7 @@ async function getDriveAccessToken(env: Env): Promise<string | null> {
             grant_type: 'refresh_token'
         })
     });
-    
+
     const data = await res.json() as any;
     return data.access_token || null;
 }
@@ -47,6 +47,14 @@ export default {
 
         try {
             if (url.pathname.startsWith('/api/')) {
+
+                if (url.pathname === '/api/auth/google/status' && request.method === 'GET') {
+                    if (!checkAuth(request)) {
+                        return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: defaultHeaders });
+                    }
+                    const tokenRecord = await env.DB.prepare("SELECT key FROM settings WHERE key = 'gdrive_refresh_token'").first();
+                    return new Response(JSON.stringify({ success: true, connected: !!tokenRecord }), { headers: defaultHeaders });
+                }
 
                 if (url.pathname === '/api/auth/google' && request.method === 'GET') {
                     if (!checkAuth(request) && url.searchParams.get('token') !== env.UPLOAD_TOKEN) {
@@ -102,7 +110,7 @@ export default {
 
                 if (url.pathname === '/api/upload/init' && request.method === 'POST') {
                     if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: defaultHeaders });
-                    
+
                     const data = await request.json() as any;
                     const project = data.project;
                     const originalName = data.originalName || 'unnamed';
@@ -118,9 +126,9 @@ export default {
 
                     const safeName = originalName.replace(`.${ext}`, '').replace(/[^a-zA-Z0-9_-]/g, '-');
                     const newName = `${safeName}_${Date.now()}.${ext}`;
-                    
+
                     const mimeType = data.mimeType || 'application/octet-stream';
-                    
+
                     const accessToken = await getDriveAccessToken(env);
                     if (!accessToken) {
                         return new Response(JSON.stringify({ success: false, error: 'Google Drive nao autenticado.' }), { status: 401, headers: defaultHeaders });
@@ -151,7 +159,7 @@ export default {
 
                 if (url.pathname === '/api/upload/chunk' && request.method === 'PUT') {
                     if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: defaultHeaders });
-                    
+
                     const sessionId = request.headers.get('x-session-id');
                     const contentRange = request.headers.get('content-range');
                     const project = request.headers.get('x-project');
@@ -165,13 +173,11 @@ export default {
                     }
 
                     const driveUrl = Buffer.from(sessionId, 'base64').toString('utf-8');
-
-                    // CORRECAO: Carregando payload explicitamente para ArrayBuffer para barrar o Transfer-Encoding chunked
                     const chunkBuffer = await request.arrayBuffer();
 
                     const driveRes = await fetch(driveUrl, {
                         method: 'PUT',
-                        headers: { 
+                        headers: {
                             'Content-Range': contentRange,
                             'Content-Length': chunkBuffer.byteLength.toString()
                         },
@@ -205,7 +211,7 @@ export default {
                     if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: defaultHeaders });
                     const data = await request.json() as any;
                     const { id, new_name } = data;
-                    
+
                     if (!id || !new_name) return new Response(JSON.stringify({ success: false, error: 'Dados invalidos' }), { status: 400, headers: defaultHeaders });
 
                     const safeNewName = new_name.trim().replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
@@ -225,9 +231,9 @@ export default {
                         headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ name: newFileName })
                     });
-                    
+
                     if (!patchRes.ok) return new Response(JSON.stringify({ success: false, error: `Falha no Drive PATCH (HTTP ${patchRes.status})` }), { status: 502, headers: defaultHeaders });
-                    
+
                     await env.DB.prepare(`UPDATE uploads SET original_name = ?, file_name = ? WHERE id = ?`).bind(newFileName, newFileName, id).run();
                     return new Response(JSON.stringify({ success: true }), { headers: defaultHeaders });
                 }
@@ -258,21 +264,21 @@ export default {
 
             if (request.method === 'GET') {
                 if (['/', '/index.html', '/gallery.html', '/auth.js'].includes(url.pathname)) {
-                     return new Response('Asset estatico nao encontrado ou regras mal configuradas.', { status: 404 });
+                    return new Response('Asset estatico nao encontrado ou regras mal configuradas.', { status: 404 });
                 }
-                
+
                 const fileName = url.pathname.substring(1);
                 if (!fileName) return new Response('Bad Request', { status: 400 });
 
                 const fileRecord = await env.DB.prepare("SELECT drive_file_id, mime_type FROM uploads WHERE file_name = ?").bind(fileName).first() as any;
-                
+
                 if (!fileRecord) return new Response('Arquivo nao encontrado no D1', { status: 404 });
 
                 const accessToken = await getDriveAccessToken(env);
                 if (!accessToken) return new Response('CDN nao autenticada com o Google Drive', { status: 500 });
 
                 const driveUrl = `https://www.googleapis.com/drive/v3/files/${fileRecord.drive_file_id}?alt=media`;
-                
+
                 const reqHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}` };
                 const rangeHeader = request.headers.get('Range');
                 if (rangeHeader) reqHeaders['Range'] = rangeHeader;
@@ -286,7 +292,7 @@ export default {
                 response.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
                 response.headers.set('Access-Control-Allow-Origin', '*');
                 response.headers.set('Content-Type', fileRecord.mime_type || 'application/octet-stream');
-                
+
                 return response;
             }
 

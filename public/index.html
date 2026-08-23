@@ -14,6 +14,8 @@
         .nav-link:hover, .nav-link.active { background: rgba(255,255,255,0.25); }
         .btn-connect { background: #28a745; color: white; text-decoration: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; transition: 0.3s; cursor: pointer; border: none; font-size: 1rem; }
         .btn-connect:hover { background: #218838; }
+        .btn-connect.connected { background: #17a2b8; }
+        .btn-connect.connected:hover { background: #138496; }
         .btn-logout { background: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.3s; }
         .btn-logout:hover { background: #c82333; }
         .container { max-width: 900px; margin: 3rem auto; padding: 0 1.5rem; }
@@ -43,7 +45,7 @@
     <nav class="navbar">
         <a href="index.html" class="navbar-brand">CDN Manager (Edge)</a>
         <div class="nav-menu">
-            <button id="btnConnectDrive" class="btn-connect">Conectar Drive</button>
+            <button id="btnConnectDrive" class="btn-connect">Verificando Drive...</button>
             <a href="index.html" class="nav-link active">Upload</a>
             <a href="gallery.html" class="nav-link">Galeria</a>
             <button onclick="AuthManager.logout()" class="btn-logout">Sair</button>
@@ -86,11 +88,35 @@
     function toggleCustomProject(val) {
         const group = document.getElementById('customProjectGroup');
         const input = document.getElementById('customProject');
-        if (val === 'custom') { group.style.display = 'block'; input.required = true; input.focus(); } 
+        if (val === 'custom') { group.style.display = 'block'; input.required = true; input.focus(); }
         else { group.style.display = 'none'; input.required = false; input.value = ''; }
     }
-    
-    window.addEventListener('DOMContentLoaded', () => AuthManager.requireAuth());
+
+    async function checkDriveStatus() {
+        const btn = document.getElementById('btnConnectDrive');
+        try {
+            const token = await AuthManager.requireAuth();
+            const res = await fetch('/api/auth/google/status', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (data.success && data.connected) {
+                btn.textContent = 'Drive Conectado (Reconectar)';
+                btn.classList.add('connected');
+            } else {
+                btn.textContent = 'Conectar Drive';
+                btn.classList.remove('connected');
+            }
+        } catch (err) {
+            btn.textContent = 'Conectar Drive';
+            btn.classList.remove('connected');
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+        await AuthManager.requireAuth();
+        await checkDriveStatus();
+    });
 
     document.getElementById('btnConnectDrive').addEventListener('click', (e) => {
         e.preventDefault();
@@ -200,7 +226,7 @@
                     ui.bar.style.backgroundColor = '#155724';
                     ui.status.innerHTML = `<span style="color:#155724;font-weight:bold;">[OK] Concluido.</span> <a href="${finalData.urls.cloudflare}" target="_blank" class="success-url">${window.location.origin}${finalData.urls.cloudflare}</a>`;
                 }
-                
+            
             } catch (error) {
                 ui.bar.style.backgroundColor = '#dc3545';
                 ui.status.innerHTML = `<span class="error-text">[ERRO] ${error.message}</span>`;
