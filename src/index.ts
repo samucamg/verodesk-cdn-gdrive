@@ -161,6 +161,7 @@ export default {
                     const newName = request.headers.get('x-new-name');
                     const ext = request.headers.get('x-ext');
                     const mimeType = request.headers.get('x-mime-type');
+                    const contentLength = request.headers.get('content-length') || '';
 
                     if (!sessionId || !contentRange || !project || !newName) {
                         return new Response(JSON.stringify({ success: false, error: 'Headers de chunk ausentes' }), { status: 400, headers: defaultHeaders });
@@ -168,11 +169,16 @@ export default {
 
                     const driveUrl = Buffer.from(sessionId, 'base64').toString('utf-8');
 
+                    // CORRECAO: duplex: 'half' obrigatorio para bypass de ReadableStream
                     const driveRes = await fetch(driveUrl, {
                         method: 'PUT',
-                        headers: { 'Content-Range': contentRange },
-                        body: request.body
-                    });
+                        headers: { 
+                            'Content-Range': contentRange,
+                            'Content-Length': contentLength
+                        },
+                        body: request.body,
+                        duplex: 'half'
+                    } as RequestInit);
 
                     if (driveRes.status === 308) {
                         return new Response(JSON.stringify({ success: true, status: 'uploading' }), { status: 200, headers: defaultHeaders });
@@ -194,7 +200,7 @@ export default {
                     }
 
                     const errText = await driveRes.text();
-                    return new Response(JSON.stringify({ success: false, error: `Falha Drive PUT (HTTP ${driveRes.status})` }), { status: 502, headers: defaultHeaders });
+                    return new Response(JSON.stringify({ success: false, error: `Falha Drive PUT (HTTP ${driveRes.status}): ${errText}` }), { status: 502, headers: defaultHeaders });
                 }
 
                 if (url.pathname === '/api/uploads' && request.method === 'PUT') {
