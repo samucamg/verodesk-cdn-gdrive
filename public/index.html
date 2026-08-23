@@ -29,12 +29,14 @@
         .btn-upload:disabled { background: #95a5a6; cursor: not-allowed; }
         .alert { margin-top: 2rem; padding: 1.25rem; border-radius: 8px; display: none; font-size: 0.95rem; }
         .alert.show { display: block; }
-        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         .alert-info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
-        .result-urls { margin-top: 1rem; font-family: 'Courier New', monospace; font-size: 0.9rem; line-height: 2; }
-        .result-urls strong { display: block; margin-top: 0.75rem; color: #155724; }
-        .result-urls code { display: block; background: #f8f9fa; padding: 0.5rem; border-radius: 5px; margin-top: 0.25rem; word-break: break-all; border: 1px solid #dee2e6; }
+        .file-progress { margin-top: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6; }
+        .file-title { font-weight: 600; margin-bottom: 0.5rem; color: #2c3e50; word-break: break-all; }
+        .progress-bar-container { width: 100%; background-color: #e0e6ed; border-radius: 4px; overflow: hidden; height: 12px; margin-bottom: 0.5rem; }
+        .progress-bar { height: 100%; background-color: #28a745; width: 0%; transition: width 0.2s; }
+        .status-text { font-size: 0.85rem; color: #6c757d; font-family: monospace; }
+        .success-url { display: block; margin-top: 0.5rem; padding: 0.5rem; background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 4px; color: #2e7d32; font-family: monospace; word-break: break-all; }
+        .error-text { color: #dc3545; font-weight: 600; }
     </style>
 </head>
 <body>
@@ -51,7 +53,7 @@
         <div class="upload-card">
             <div class="card-header">
                 <h1>CDN Uploader</h1>
-                <p>Envie arquivos via API Cloudflare Worker para o Google Drive</p>
+                <p>Envie arquivos grandes (Ate 1.5GB) com Resumable Uploads</p>
             </div>
             <form id="uploadForm">
                 <div class="form-group">
@@ -67,13 +69,13 @@
                 </div>
                 <div class="form-group" id="customProjectGroup" style="display: none;">
                     <label for="customProject">Nome da Nova Categoria (Sem espacos/acentos)</label>
-                    <input type="text" id="customProject" class="form-control" placeholder="ex: banners-2026" pattern="[a-zA-Z0-9_-]{1,64}">
+                    <input type="text" id="customProject" class="form-control" placeholder="ex: manuais" pattern="[a-zA-Z0-9_-]{1,64}">
                 </div>
                 <div class="form-group">
                     <label for="file">Selecione os Arquivos</label>
                     <input type="file" id="file" class="form-control" accept="image/*,audio/mp3,audio/wav,video/mp4,video/mkv,application/pdf" multiple required>
                 </div>
-                <button type="submit" class="btn-upload" id="submitBtn">Enviar para CDN</button>
+                <button type="submit" class="btn-upload" id="submitBtn">Enviar Arquivos</button>
             </form>
             <div id="result" class="alert"></div>
         </div>
@@ -84,114 +86,134 @@
     function toggleCustomProject(val) {
         const group = document.getElementById('customProjectGroup');
         const input = document.getElementById('customProject');
-        if (val === 'custom') {
-            group.style.display = 'block';
-            input.required = true;
-            input.focus();
-        } else {
-            group.style.display = 'none';
-            input.required = false;
-            input.value = '';
-        }
+        if (val === 'custom') { group.style.display = 'block'; input.required = true; input.focus(); } 
+        else { group.style.display = 'none'; input.required = false; input.value = ''; }
     }
-    window.addEventListener('DOMContentLoaded', () => {
-        AuthManager.requireAuth();
-    });
+    
+    window.addEventListener('DOMContentLoaded', () => AuthManager.requireAuth());
 
     document.getElementById('btnConnectDrive').addEventListener('click', (e) => {
         e.preventDefault();
         const token = AuthManager.getToken();
-        if(!token) {
-            alert('Faca login primeiro.');
-            return;
-        }
+        if(!token) return alert('Faca login primeiro.');
         window.open('/api/auth/google?token=' + encodeURIComponent(token), '_blank');
     });
 
     document.getElementById('uploadForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        
         const submitBtn = document.getElementById('submitBtn');
         const resultDiv = document.getElementById('result');
         const fileInput = document.getElementById('file');
         
         if (fileInput.files.length === 0) return;
-        
         const token = await AuthManager.requireAuth();
         
         let project = document.getElementById('project').value;
         if (project === 'custom') {
-            const customVal = document.getElementById('customProject').value.trim().toLowerCase();
-            const safeProject = customVal.replace(/[^a-zA-Z0-9_-]/g, '-');
-            if (!safeProject) {
-                alert('Informe um nome valido para a categoria.');
-                return;
-            }
-            project = safeProject;
+            project = document.getElementById('customProject').value.trim().toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '-');
+            if (!project) return alert('Informe um nome valido para a categoria.');
         }
+
         submitBtn.disabled = true;
-        let successCount = 0;
-        let errorCount = 0;
-        let resultsHtml = '';
+        resultDiv.className = 'alert alert-info show';
+        resultDiv.innerHTML = '<strong>Iniciando processamento...</strong><br><br>';
         
         const files = Array.from(fileInput.files);
-        const totalFiles = files.length;
+        const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB exatos para o Drive
         
-        resultDiv.className = 'alert alert-info show';
-        
-        for (let i = 0; i < totalFiles; i++) {
+        // Criar UI containers para os arquivos
+        const progressUIs = {};
+        files.forEach((file, idx) => {
+            const id = `file-ui-${idx}`;
+            const html = `
+                <div class="file-progress" id="${id}">
+                    <div class="file-title">${file.name} (${(file.size / (1024*1024)).toFixed(2)} MB)</div>
+                    <div class="progress-bar-container"><div class="progress-bar" id="${id}-bar"></div></div>
+                    <div class="status-text" id="${id}-status">Aguardando na fila...</div>
+                </div>`;
+            resultDiv.insertAdjacentHTML('beforeend', html);
+            progressUIs[id] = { 
+                bar: document.getElementById(`${id}-bar`), 
+                status: document.getElementById(`${id}-status`) 
+            };
+        });
+
+        // Loop Sequencial de Upload
+        for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            resultDiv.innerHTML = `Enviando arquivo ${i + 1} de ${totalFiles}: <strong>${file.name}</strong>...`;
-            
-            const formData = new FormData();
-            formData.append('image', file);
-            formData.append('project', project);
-            formData.append('token', token);
+            const ui = progressUIs[`file-ui-${i}`];
             
             try {
-                const response = await fetch('/api/upload', {
+                ui.status.innerHTML = 'Solicitando sessao ao Google Drive...';
+                
+                // 1. INIT
+                const initRes = await fetch('/api/upload/init', {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: formData
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ originalName: file.name, size: file.size, project, mimeType: file.type })
                 });
                 
-                if (response.status === 401) {
-                    AuthManager.logout();
-                    throw new Error('Nao autorizado. Faca login novamente.');
-                }
-                const text = await response.text();
-                try {
-                    const data = JSON.parse(text);
-                    if (data.success) {
-                        successCount++;
-                        resultsHtml += `<strong>[OK] ${file.name}</strong><code>${window.location.origin}${data.urls.cloudflare}</code>`;
-                    } else {
-                        errorCount++;
-                        resultsHtml += `<strong>[ERRO] ${file.name}:</strong> ${data.error}<br>`;
+                if (initRes.status === 401) { AuthManager.logout(); throw new Error('Token invalido'); }
+                const initData = await initRes.json();
+                if (!initData.success) throw new Error(initData.error);
+                
+                const { sessionId, newName, ext, mimeType } = initData;
+                
+                // 2. CHUNKS
+                let start = 0;
+                let finalData = null;
+                
+                while (start < file.size) {
+                    const end = Math.min(start + CHUNK_SIZE, file.size);
+                    const chunk = file.slice(start, end);
+                    const range = `bytes ${start}-${end - 1}/${file.size}`;
+                    
+                    ui.status.innerHTML = `Enviando fatia ${start}-${end}...`;
+                    
+                    const chunkRes = await fetch('/api/upload/chunk', {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'X-Session-Id': sessionId,
+                            'Content-Range': range,
+                            'X-Project': project,
+                            'X-Original-Name': encodeURIComponent(file.name),
+                            'X-New-Name': newName,
+                            'X-Ext': ext,
+                            'X-Mime-Type': mimeType
+                        },
+                        body: chunk
+                    });
+                    
+                    let chunkData;
+                    try { chunkData = await chunkRes.json(); } catch(e) { throw new Error(`Falha HTTP ${chunkRes.status} do Edge Server`); }
+                    if (!chunkData.success) throw new Error(chunkData.error);
+                    
+                    const percent = Math.round((end / file.size) * 100);
+                    ui.bar.style.width = `${percent}%`;
+                    ui.status.innerHTML = `${percent}% concluido`;
+                    
+                    if (chunkData.urls) {
+                        finalData = chunkData;
+                        break;
                     }
-                } catch (parseError) {
-                    errorCount++;
-                    resultsHtml += `<strong>[ERRO] ${file.name}:</strong> Falha no parse JSON<br>`;
+                    start = end;
                 }
+                
+                if (finalData) {
+                    ui.bar.style.backgroundColor = '#155724';
+                    ui.status.innerHTML = `<span style="color:#155724;font-weight:bold;">[OK] Concluido.</span> <a href="${finalData.urls.cloudflare}" target="_blank" class="success-url">${window.location.origin}${finalData.urls.cloudflare}</a>`;
+                }
+                
             } catch (error) {
-                errorCount++;
-                resultsHtml += `<strong>[ERRO] ${file.name}:</strong> ${error.message}<br>`;
+                ui.bar.style.backgroundColor = '#dc3545';
+                ui.status.innerHTML = `<span class="error-text">[ERRO] ${error.message}</span>`;
             }
         }
         
-        if (successCount > 0 && errorCount === 0) {
-            resultDiv.className = 'alert alert-success show';
-            resultDiv.innerHTML = `<strong>Todos os ${successCount} uploads concluidos!</strong><div class="result-urls">${resultsHtml}</div>`;
-            fileInput.value = '';
-        } else {
-            resultDiv.className = 'alert alert-error show';
-            resultDiv.innerHTML = `<strong>Finalizado (${successCount} OK, ${errorCount} Erros)</strong><div class="result-urls">${resultsHtml}</div>`;
-        }
-        
+        document.getElementById('result').insertAdjacentHTML('afterbegin', '<strong>Processamento finalizado!</strong><br><br>');
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Enviar para CDN';
+        fileInput.value = '';
     });
     </script>
 </body>

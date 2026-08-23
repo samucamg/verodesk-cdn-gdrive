@@ -9,7 +9,7 @@ export interface Env {
     GOOGLE_REDIRECT_URI: string;
 }
 
-const MAX_FILE_SIZE = 1500 * 1024 * 1024;
+const MAX_FILE_SIZE = 1500 * 1024 * 1024; // 1.5GB
 const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf', 'mp3', 'mp4', 'mkv'];
 
 async function getDriveAccessToken(env: Env): Promise<string | null> {
@@ -100,81 +100,101 @@ export default {
                     return new Response(JSON.stringify({ success: true, uploads: results }), { headers: defaultHeaders });
                 }
 
-                if (url.pathname === '/api/upload' && request.method === 'POST') {
-                    const formData = await request.formData();
-                    const token = formData.get('token');
+                // --- INIT CHUNKED UPLOAD ---
+                if (url.pathname === '/api/upload/init' && request.method === 'POST') {
+                    if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: defaultHeaders });
                     
-                    if (token !== env.UPLOAD_TOKEN && !checkAuth(request)) {
-                        return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: defaultHeaders });
-                    }
-
-                    const project = formData.get('project') as string;
-                    const file = formData.get('image') as File | null;
+                    const data = await request.json() as any;
+                    const project = data.project;
+                    const originalName = data.originalName || 'unnamed';
+                    const size = parseInt(data.size, 10);
 
                     if (!project || !/^[a-zA-Z0-9_-]{1,64}$/.test(project)) {
                         return new Response(JSON.stringify({ success: false, error: 'Identificador de projeto invalido' }), { status: 400, headers: defaultHeaders });
                     }
+                    if (size > MAX_FILE_SIZE) return new Response(JSON.stringify({ success: false, error: 'Excede o limite permitido (1.5GB)' }), { status: 400, headers: defaultHeaders });
 
-                    if (!file) return new Response(JSON.stringify({ success: false, error: 'Arquivo nao enviado' }), { status: 400, headers: defaultHeaders });
-                    if (file.size > MAX_FILE_SIZE) return new Response(JSON.stringify({ success: false, error: 'Excede o limite de tamanho permitido' }), { status: 400, headers: defaultHeaders });
-
-                    const originalName = file.name;
                     const ext = originalName.split('.').pop()?.toLowerCase() || '';
-                    
                     if (!ALLOWED_EXTENSIONS.includes(ext)) return new Response(JSON.stringify({ success: false, error: 'Extensao invalida' }), { status: 400, headers: defaultHeaders });
 
                     const safeName = originalName.replace(`.${ext}`, '').replace(/[^a-zA-Z0-9_-]/g, '-');
                     const newName = `${safeName}_${Date.now()}.${ext}`;
-                    const mimeType = file.type || 'application/octet-stream';
+                    
+                    const mimeMap: Record<string, string> = { mp4: 'video/mp4', mkv: 'video/x-matroska', pdf: 'application/pdf', mp3: 'audio/mpeg', wav: 'audio/wav', jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml' };
+                    const mimeType = data.mimeType || mimeMap[ext] || 'application/octet-stream';
                     
                     const accessToken = await getDriveAccessToken(env);
                     if (!accessToken) {
-                        return new Response(JSON.stringify({ success: false, error: 'Google Drive nao autenticado. Faca o login via OAuth2 primeiro.' }), { status: 401, headers: defaultHeaders });
+                        return new Response(JSON.stringify({ success: false, error: 'Google Drive nao autenticado.' }), { status: 401, headers: defaultHeaders });
                     }
 
-                    const metadata = { name: newName, mimeType: mimeType };
-                    
                     const initRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${accessToken}`,
                             'Content-Type': 'application/json',
                             'X-Upload-Content-Type': mimeType,
-                            'X-Upload-Content-Length': file.size.toString()
+                            'X-Upload-Content-Length': size.toString()
                         },
-                        body: JSON.stringify(metadata)
+                        body: JSON.stringify({ name: newName, mimeType })
                     });
 
                     if (!initRes.ok) {
-                        return new Response(JSON.stringify({ success: false, error: `Falha ao iniciar sessao no Drive (HTTP ${initRes.status})` }), { status: 502, headers: defaultHeaders });
+                        const errText = await initRes.text();
+                        return new Response(JSON.stringify({ success: false, error: `Falha ao abrir sessao no Drive (HTTP ${initRes.status}): ${errText}` }), { status: 502, headers: defaultHeaders });
                     }
 
                     const uploadUrl = initRes.headers.get('Location');
-                    if (!uploadUrl) {
-                        return new Response(JSON.stringify({ success: false, error: 'A API do Drive nao retornou a URL de sessao.' }), { status: 502, headers: defaultHeaders });
+                    if (!uploadUrl) return new Response(JSON.stringify({ success: false, error: 'API do Drive nao retornou Location' }), { status: 502, headers: defaultHeaders });
+
+                    const sessionId = Buffer.from(uploadUrl).toString('base64');
+                    return new Response(JSON.stringify({ success: true, sessionId, newName, ext, mimeType }), { headers: defaultHeaders });
+                }
+
+                // --- TRANSFER CHUNKS ---
+                if (url.pathname === '/api/upload/chunk' && request.method === 'PUT') {
+                    if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: defaultHeaders });
+                    
+                    const sessionId = request.headers.get('x-session-id');
+                    const contentRange = request.headers.get('content-range');
+                    const project = request.headers.get('x-project');
+                    const originalName = decodeURIComponent(request.headers.get('x-original-name') || '');
+                    const newName = request.headers.get('x-new-name');
+                    const ext = request.headers.get('x-ext');
+                    const mimeType = request.headers.get('x-mime-type');
+
+                    if (!sessionId || !contentRange || !project || !newName) {
+                        return new Response(JSON.stringify({ success: false, error: 'Headers de chunk ausentes' }), { status: 400, headers: defaultHeaders });
                     }
 
-                    const uploadRes = await fetch(uploadUrl, {
+                    const driveUrl = Buffer.from(sessionId, 'base64').toString('utf-8');
+
+                    const driveRes = await fetch(driveUrl, {
                         method: 'PUT',
-                        headers: { 'Content-Length': file.size.toString() },
-                        body: file 
+                        headers: { 'Content-Range': contentRange },
+                        body: request.body
                     });
 
-                    if (!uploadRes.ok) {
-                        return new Response(JSON.stringify({ success: false, error: `Falha ao enviar binario para o Drive (HTTP ${uploadRes.status})` }), { status: 502, headers: defaultHeaders });
+                    if (driveRes.status === 308) {
+                        return new Response(JSON.stringify({ success: true, status: 'uploading' }), { status: 200, headers: defaultHeaders });
                     }
 
-                    const driveData = await uploadRes.json() as any;
-                    const driveFileId = driveData.id;
+                    if (driveRes.ok) {
+                        const driveData = await driveRes.json() as any;
+                        const driveFileId = driveData.id;
+                        const totalSize = parseInt(contentRange.split('/')[1], 10) || 0;
 
-                    await env.DB.prepare(
-                        `INSERT INTO uploads (project_key, project_name, original_name, file_name, file_size, file_extension, mime_type, drive_file_id, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                    ).bind(
-                        project, project, originalName, newName, file.size, ext, mimeType, driveFileId, 'admin'
-                    ).run();
+                        await env.DB.prepare(
+                            `INSERT INTO uploads (project_key, project_name, original_name, file_name, file_size, file_extension, mime_type, drive_file_id, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                        ).bind(
+                            project, project, originalName, newName, totalSize, ext, mimeType, driveFileId, 'admin'
+                        ).run();
 
-                    const urls = { cloudflare: `/${newName}` };
-                    return new Response(JSON.stringify({ success: true, urls }), { headers: defaultHeaders });
+                        return new Response(JSON.stringify({ success: true, urls: { cloudflare: `/${newName}` } }), { headers: defaultHeaders });
+                    }
+
+                    const errText = await driveRes.text();
+                    return new Response(JSON.stringify({ success: false, error: `Falha Drive PUT (HTTP ${driveRes.status}): ${errText}` }), { status: 502, headers: defaultHeaders });
                 }
 
                 if (url.pathname === '/api/uploads' && request.method === 'PUT') {
@@ -198,22 +218,16 @@ export default {
                     const patchUrl = `https://www.googleapis.com/drive/v3/files/${fileRecord.drive_file_id}`;
                     const patchRes = await fetch(patchUrl, {
                         method: 'PATCH',
-                        headers: { 
-                            'Authorization': `Bearer ${accessToken}`, 
-                            'Content-Type': 'application/json' 
-                        },
+                        headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ name: newFileName })
                     });
                     
                     if (!patchRes.ok) return new Response(JSON.stringify({ success: false, error: `Falha no Drive PATCH (HTTP ${patchRes.status})` }), { status: 502, headers: defaultHeaders });
                     
-                    await env.DB.prepare(`UPDATE uploads SET original_name = ?, file_name = ? WHERE id = ?`)
-                        .bind(newFileName, newFileName, id).run();
-
+                    await env.DB.prepare(`UPDATE uploads SET original_name = ?, file_name = ? WHERE id = ?`).bind(newFileName, newFileName, id).run();
                     return new Response(JSON.stringify({ success: true }), { headers: defaultHeaders });
                 }
 
-                // --- ETAPA 1.8: DELETE FILE (DRIVE API) ---
                 if (url.pathname === '/api/uploads' && request.method === 'DELETE') {
                     if (!checkAuth(request)) return new Response(JSON.stringify({ success: false, error: 'Nao autorizado' }), { status: 401, headers: defaultHeaders });
                     const data = await request.json() as any;
@@ -226,16 +240,12 @@ export default {
                     if (!accessToken) return new Response(JSON.stringify({ success: false, error: 'Google Drive nao autenticado' }), { status: 502, headers: defaultHeaders });
 
                     const driveUrl = `https://www.googleapis.com/drive/v3/files/${fileRecord.drive_file_id}`;
-                    const delRes = await fetch(driveUrl, {
-                        method: 'DELETE',
-                        headers: { 'Authorization': `Bearer ${accessToken}` }
-                    });
+                    const delRes = await fetch(driveUrl, { method: 'DELETE', headers: { 'Authorization': `Bearer ${accessToken}` } });
 
                     if (delRes.ok || delRes.status === 404) {
                         await env.DB.prepare("DELETE FROM uploads WHERE id = ?").bind(data.id).run();
                         return new Response(JSON.stringify({ success: true }), { headers: defaultHeaders });
                     }
-
                     return new Response(JSON.stringify({ success: false, error: `Falha Drive DELETE (HTTP ${delRes.status})` }), { status: 500, headers: defaultHeaders });
                 }
 
@@ -252,36 +262,21 @@ export default {
 
                 const fileRecord = await env.DB.prepare("SELECT drive_file_id, mime_type FROM uploads WHERE file_name = ?").bind(fileName).first() as any;
                 
-                if (!fileRecord) {
-                    return new Response('Arquivo nao encontrado no D1', { status: 404 });
-                }
+                if (!fileRecord) return new Response('Arquivo nao encontrado no D1', { status: 404 });
 
                 const accessToken = await getDriveAccessToken(env);
-                if (!accessToken) {
-                    return new Response('CDN nao autenticada com o Google Drive', { status: 500 });
-                }
+                if (!accessToken) return new Response('CDN nao autenticada com o Google Drive', { status: 500 });
 
                 const driveUrl = `https://www.googleapis.com/drive/v3/files/${fileRecord.drive_file_id}?alt=media`;
                 
-                const reqHeaders: Record<string, string> = {
-                    'Authorization': `Bearer ${accessToken}`
-                };
-                
+                const reqHeaders: Record<string, string> = { 'Authorization': `Bearer ${accessToken}` };
                 const rangeHeader = request.headers.get('Range');
-                if (rangeHeader) {
-                    reqHeaders['Range'] = rangeHeader;
-                }
+                if (rangeHeader) reqHeaders['Range'] = rangeHeader;
 
-                const driveReq = new Request(driveUrl, {
-                    method: 'GET',
-                    headers: reqHeaders
-                });
-
+                const driveReq = new Request(driveUrl, { method: 'GET', headers: reqHeaders });
                 const driveRes = await fetch(driveReq);
 
-                if (!driveRes.ok) {
-                    return new Response(`Erro ao buscar arquivo no upstream: HTTP ${driveRes.status}`, { status: 502 });
-                }
+                if (!driveRes.ok) return new Response(`Erro ao buscar arquivo no upstream: HTTP ${driveRes.status}`, { status: 502 });
 
                 const response = new Response(driveRes.body, driveRes);
                 response.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
