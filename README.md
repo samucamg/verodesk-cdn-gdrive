@@ -14,6 +14,7 @@
 
 - [Visão geral](#visão-geral)
 - [Principais recursos](#principais-recursos)
+- [Escolha a solução](#escolha-a-solução)
 - [Arquitetura](#arquitetura)
 - [Deploy em um clique](#deploy-em-um-clique)
 - [Campos do assistente](#campos-do-assistente)
@@ -64,6 +65,30 @@ Ao abrir um arquivo na galeria, o sistema disponibiliza o link de entrega pelo p
 - 🛡️ **Validações de segurança:** validação de extensão, tamanho máximo de 1,5 GB, nomes de arquivos, identificadores de projeto e operações de renomeação/exclusão.
 - 📊 **Metadados e estatísticas:** D1 registra caminho, tamanho, extensão, identificador do arquivo no Drive e data de upload.
 - 🔄 **Renomeação consistente:** o Worker renomeia o arquivo no Drive e sincroniza o registro D1.
+
+## Escolha a solução
+
+O ecossistema VeroDesk e VeroCast oferece três caminhos para hospedagem e entrega de mídia. A escolha depende principalmente do volume dos arquivos, da origem de armazenamento e do nível de proteção necessário para o conteúdo.
+
+| Solução | Modelo | Melhor indicação | Armazenamento e entrega | Proteção de conteúdo |
+|---|---|---|---|---|
+| **VeroDesk CDN — GitHub** | Gratuito e open source | Imagens, documentos, áudios curtos e assets web de até 10 MB | Repositório GitHub com URLs GitHub, GitHub Raw e jsDelivr | Proteção do painel e das credenciais administrativas; não é uma solução antipirataria para vídeo premium |
+| **VeroDesk CDN — Google Drive** | Gratuito e open source | PDFs pesados, áudios extensos, vídeos promocionais e arquivos de até 1,5 GB | Google Drive via OAuth 2.0 e proxy de borda do Cloudflare, com domínio próprio opcional | Proteção do painel, das credenciais OAuth e da origem do Drive; não substitui um DRM para aulas pagas |
+| **VeroCast DRM** | Comercial e adaptável à infraestrutura do cliente | Cursos, aulas e vídeos cujo acesso, compartilhamento e vazamento precisam ser desestimulados e controlados | Streaming protegido para integrações com plataformas educacionais, como o VeroClass AI | Camadas de proteção por assinatura temporária, sessão, IP, origem autorizada, limitação de requisições e marca d'água dinâmica |
+
+### Quando escolher esta edição
+
+Escolha o **VeroDesk CDN — Google Drive** quando precisar reduzir custos de storage e publicar arquivos maiores que o limite prático da edição GitHub. O upload resumable divide arquivos em blocos de 5 MB, permitindo o envio de até 1,5 GB sem depender de uma única requisição acima do limite do Cloudflare.
+
+Esta edição é indicada para mídia de distribuição geral: materiais didáticos, PDFs, downloads, áudios longos e vídeos promocionais. Ela fornece player HTML5 e embed responsivo para os formatos compatíveis, mas não foi projetada para impedir de forma rigorosa o compartilhamento de uma aula paga ou a gravação de tela.
+
+### Outras soluções do ecossistema
+
+- Para assets leves, estáticos e com distribuição pública agressivamente cacheada pelo jsDelivr, conheça o [VeroDesk CDN — Edição GitHub](https://github.com/samucamg/verodesk-cdn-github).
+- Para vídeos que constituem o produto principal e exigem controles comerciais de acesso, conheça o **VeroCast DRM**, solução comercial utilizada na arquitetura de vídeo do [VeroClass AI](https://github.com/samucamg/VeroClassAi), plataforma da [Inglês Curso Idiomas](https://www.inglescurso.com.br).
+
+> 📌 Os dois projetos VeroDesk são gratuitos e de código aberto. O VeroCast DRM é uma solução comercial, projetada para ser adaptada à infraestrutura, ao domínio e às regras de acesso de cada cliente.
+```
 
 ## Arquitetura
 
