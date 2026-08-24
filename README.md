@@ -504,6 +504,14 @@ O script de deploy executa validação TypeScript, aplica migrations remotas pel
 | Arquivo não é entregue | Arquivo removido do Drive, metadado inconsistente ou configuração do proxy incorreta | Confirme a existência do arquivo no Drive, o registro D1 e a rota de entrega do Worker |
 | URL Cloudflare vazia | `CDN_BASE_URL` não foi configurada | É esperado; use a URL padrão do Worker ou configure um domínio próprio |
 
+## Autor e Créditos
+
+Desenvolvido por **Samuel de Sousa Santos**.
+
+- **Email:** [samucamg@gmail.com](mailto:samucamg@gmail.com)
+- **YouTube:** [Samuca Tutoriais](https://www.youtube.com/c/samucatutoriais)
+- **GitHub:** [@samucamg](https://github.com/samucamg)
+
 ## Contribuições
 
 1. Faça um fork do repositório.
